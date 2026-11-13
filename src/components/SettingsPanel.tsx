@@ -51,14 +51,14 @@ export function SettingsPanel({ settings, onChange, ingredients, busy, onGenerat
   return (
     <aside className="card sticky top-14 z-20 lg:top-[4.5rem] lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto print:hidden">
       <div className="flex items-center justify-between gap-2 p-3">
-        <button type="button" className="flex flex-1 items-center gap-2 text-left lg:pointer-events-none" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left lg:pointer-events-none" aria-expanded={open} onClick={() => setOpen(!open)}>
           <span className="text-sm font-semibold">Nastavenia</span>
           <span className="truncate text-xs text-stone-500">
             {settings.people} os. · {settings.budget} € · {settings.kcal} kcal
           </span>
           <span className="ml-auto text-stone-400 lg:hidden">{open ? '▲' : '▼'}</span>
         </button>
-        <button type="button" className="btn btn-primary !py-2" disabled={busy} onClick={onGenerate}>{busy ? 'Počítam…' : 'Vygenerovať'}</button>
+        <button type="button" className="btn btn-primary shrink-0 !py-2" disabled={busy} onClick={onGenerate}>{busy ? 'Počítam…' : 'Vygenerovať'}</button>
       </div>
 
       <div className={`${open ? 'block' : 'hidden'} max-h-[70vh] space-y-4 overflow-y-auto border-t border-stone-100 p-3 lg:block lg:max-h-none`}>

@@ -225,8 +225,8 @@ function generateByRules(kind: RecipeKind, catalog: Catalog): number {
           [method.sauce ? tomato : undefined, 150],
         ], [
           `${cap(carb.name)} uvarte alebo pripravte podľa návodu na obale.`,
-          `${cap(protein.name)} pripravte (strukoviny vopred uvarte domäkka), osoľte, okoreňte a ${method.verb}.`,
-          `Pridajte ${veg.name}, krátko prehrejte, dochuťte a podávajte s prílohou.`,
+          `${cap(protein.name)}${protein.role === 'legume' ? ' vopred uvarte domäkka,' : ''} osoľte, okoreňte a ${method.verb}.`,
+          `Pridajte zeleninu (${veg.name}), krátko prehrejte, dochuťte a podávajte s prílohou.`,
         ]);
       });
     });

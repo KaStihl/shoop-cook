@@ -289,5 +289,5 @@ export async function generatePlan(request: PlanRequest): Promise<Plan> {
   }
 
   if (evaluation.cart.estimateTotal > 0) warnings.push('Niektoré položky nemajú aktuálnu cenu z obchodu – v košíku sú označené ako „odhad ceny“.');
-  return { generatedAt: new Date().toISOString(), ...planner.toPlan(groups, evaluation), budget: settings.budget, feasible, minCost, warnings };
+  return { generatedAt: new Date().toISOString(), ...planner.toPlan(groups, evaluation), budget: settings.budget, feasible, minCost, warnings: [...new Set(warnings)] };
 }

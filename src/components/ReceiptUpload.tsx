@@ -62,7 +62,7 @@ export function ReceiptUpload({ onDone }: { onDone: () => void }) {
     <section className="card p-4">
       <h2 className="font-bold">Bloček z nákupu</h2>
       <p className="mt-1 text-xs text-stone-500">
-        Odfoťte pokladničný bloček z Kauflandu alebo Lidla. Ceny z neho sa uložia ako referenčné ceny obchodu a použijú sa v košíku. Fotografia sa odošle na rozpoznanie do Claude API a neukladá sa.
+        Odfoťte pokladničný bloček z Kauflandu, Lidla, Billy alebo Tesca. Ceny z neho sa uložia ako referenčné ceny obchodu a použijú sa v košíku. Fotografia sa odošle na rozpoznanie do Claude API a neukladá sa.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button type="button" className={`chip ${store === 'auto' ? 'chip-on' : ''}`} onClick={() => setStore('auto')}>Obchod rozpoznať</button>

@@ -1,10 +1,12 @@
 import { buildCart, getFreshness, loadCatalog, type Catalog } from './catalog';
 import { ensureLibrary, loadLibrary, violation, type LibraryRecipe, type RecipeFacts } from './recipes';
 import { round2 } from './text';
-import type { Cart, Macros, MealType, Plan, PlanDay, PlanRequest, PlanSlot, RecipeKind, Settings } from './types';
-import { MEALS } from './types';
+import type { Cart, Macros, MealType, Plan, PlanDay, PlanRequest, PlanSlot, RecipeKind, Settings, Store } from './types';
+import { MEALS, STORE_LABEL } from './types';
 
 const DAYS = 7;
+/** Share of the budget a generated filler recipe costs per slot compared with a real recipe. */
+const GENERATED_PENALTY = 0.02;
 const SHARE: Record<MealType, number> = { breakfast: 0.25, lunch: 0.35, dinner: 0.3, snack: 0.1 };
 const kindOf = (meal: MealType): RecipeKind => (meal === 'lunch' || meal === 'dinner' ? 'main' : meal);
 
@@ -63,6 +65,7 @@ class Planner {
     for (const { recipe, facts } of loadLibrary(catalog)) {
       const entries = recipe.ingredients.map((ing) => ({ ing, entry: catalog.get(ing.id) }));
       const hasDeal = entries.some(({ entry }) => entry?.hasDeal);
+      if (recipe.source === 'rule') this.generated.add(recipe.id);
       this.pool[recipe.kind].push({
         recipe, facts, hasDeal,
         cost: entries.reduce((acc, { ing, entry }) => acc + (this.pantry.has(ing.id) ? 0 : (ing.grams / 1000) * (entry?.unitPrice ?? 0)), 0),
@@ -91,6 +94,8 @@ class Planner {
   }
 
   avoid = new Set<number>();
+  /** Recipes assembled by the rule generator; real recipes (own, web, AI) are preferred over them. */
+  private readonly generated = new Set<number>();
 
   indexOf(kind: RecipeKind, recipeId: number): number {
     return this.pool[kind].findIndex((c) => c.recipe.id === recipeId);
@@ -158,6 +163,7 @@ class Planner {
       for (const [id, count] of uses) {
         objective += Math.max(0, count - settings.maxRepeats) * this.weight * 0.15;
         if (this.avoid.has(id)) objective += count * this.weight * 0.012;
+        if (this.generated.has(id)) objective += count * this.weight * GENERATED_PENALTY;
       }
     }
     return { objective, cart, days };
@@ -181,6 +187,7 @@ class Planner {
         const score = candidate.cost * servings * (candidate.hasDeal && this.settings.dealMode !== 'off' ? 1 - 0.3 * this.settings.dealWeight : 1)
           + (variety && used + group.slots.length > this.settings.maxRepeats ? this.weight * 0.15 : 0)
           + (variety && this.avoid.has(candidate.recipe.id) ? this.weight * 0.012 * group.slots.length : 0)
+          + (variety && candidate.recipe.source === 'rule' ? this.weight * GENERATED_PENALTY * group.slots.length : 0)
           - (candidate.recipe.feedback > 0 ? 0.4 : 0) + random() * 0.05;
         if (score < bestScore) { bestScore = score; group.choice = index; }
       }
@@ -249,7 +256,27 @@ export async function generatePlan(request: PlanRequest): Promise<Plan> {
   const { settings } = request;
   if (!settings.meals.length) throw new Error('Vyberte aspoň jedno jedlo dňa.');
   if (!settings.stores.length) throw new Error('Vyberte aspoň jeden obchod.');
-  const catalog = loadCatalog(settings.stores);
+  if (settings.cartMode !== 'single') return planFor(request, settings.stores);
+
+  // One-chain cart: plan against each selected chain separately and keep the cheapest one that has real prices.
+  const options: { store: Store; plan: Plan }[] = [];
+  for (const store of settings.stores) {
+    const plan = await planFor(request, [store]);
+    if (plan.cart.lines.some((l) => !l.estimate)) options.push({ store, plan });
+  }
+  if (!options.length) {
+    const plan = await planFor(request, settings.stores);
+    return { ...plan, warnings: [...plan.warnings, 'Žiadny z vybraných reťazcov nemá aktuálne ceny, košík je zostavený z odhadov.'] };
+  }
+  options.sort((a, b) => Number(b.plan.feasible) - Number(a.plan.feasible) || a.plan.cart.total - b.plan.cart.total);
+  const best = options[0];
+  const overview = options.map((o) => `${STORE_LABEL[o.store]} ${o.plan.cart.total.toFixed(2)} €`).join(', ');
+  return { ...best.plan, singleStore: best.store, warnings: [`Celý nákup je z jedného reťazca: ${STORE_LABEL[best.store]} (${overview}).`, ...best.plan.warnings] };
+}
+
+async function planFor(request: PlanRequest, stores: Store[]): Promise<Plan> {
+  const { settings } = request;
+  const catalog = loadCatalog(stores);
   const notes = await ensureLibrary(settings, catalog);
   const planner = new Planner(settings, catalog);
   const random = mulberry32(request.seed ?? Date.now());
@@ -296,5 +323,5 @@ export async function generatePlan(request: PlanRequest): Promise<Plan> {
   }
 
   if (evaluation.cart.estimateTotal > 0) warnings.push('Niektoré položky nemajú aktuálnu cenu z obchodu – v košíku sú označené ako „odhad ceny“.');
-  return { generatedAt: new Date().toISOString(), ...planner.toPlan(groups, evaluation), budget: settings.budget, feasible, minCost, warnings: [...new Set(warnings)] };
+  return { generatedAt: new Date().toISOString(), ...planner.toPlan(groups, evaluation), budget: settings.budget, singleStore: null, feasible, minCost, warnings: [...new Set(warnings)] };
 }

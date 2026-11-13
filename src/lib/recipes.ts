@@ -5,6 +5,7 @@ import { cacheGet, cacheSet, db, schema } from '@/db';
 import { RECIPE_MODEL, hasLlm, llm } from './anthropic';
 import type { IngredientDiet, Role } from './canonical';
 import type { Catalog, CatalogEntry } from './catalog';
+import { parseIngredientLines } from './ingredients';
 import { sha } from './text';
 import type { Diet, Macros, RecipeKind, Settings } from './types';
 
@@ -38,18 +39,29 @@ interface Draft {
   ingredients: RecipeIngredient[];
   steps: string[];
   prepMinutes: number;
-  source: 'llm' | 'rule' | 'yummybox';
+  source: 'llm' | 'rule' | 'yummybox' | 'web' | 'own';
 }
 
 export interface ExternalRecipe {
   name: string;
   url: string;
   ingredients: RecipeIngredient[];
+  /** Original ingredient lines without a canonical counterpart; shown with the recipe, not bought. */
+  unmatched: string[];
   prepMinutes: number;
   /** Energy per portion published by the source; used to calibrate the estimated amounts. */
   kcal?: number;
-  recognised: number;
   total: number;
+}
+
+export interface OwnRecipeInput {
+  name: string;
+  kind: RecipeKind;
+  portions: number;
+  prepMinutes: number;
+  /** One ingredient per line, e.g. "500 g kuracie prsia". */
+  ingredients: string;
+  steps: string;
 }
 
 const DIET_RANK: Record<IngredientDiet, number> = { vegan: 0, vegetarian: 1, fish: 2, meat: 3 };
@@ -130,25 +142,44 @@ function finalize(draft: Draft, catalog: Catalog): { row: typeof schema.recipes.
 const save = (row: typeof schema.recipes.$inferInsert): boolean =>
   db.insert(schema.recipes).values(row).onConflictDoNothing().run().changes > 0;
 
-/** Stores a recipe scraped from another site: ingredients and a link back, never the original method text. */
-export function importExternal(recipe: ExternalRecipe, catalog: Catalog): 'saved' | 'duplicate' | string {
+const extrasNote = (unmatched: string[]): string[] =>
+  (unmatched.length ? [`Navyše podľa receptu (nie je v košíku): ${unmatched.join('; ')}.`] : []);
+
+/** Stores a recipe read from another site: ingredients and a link back, never the original method text. */
+export function importExternal(recipe: ExternalRecipe, catalog: Catalog, source: 'yummybox' | 'web' = 'yummybox', kind: RecipeKind = 'main'): 'saved' | 'duplicate' | string {
   let { ingredients } = recipe;
   const facts = computeFacts(ingredients, catalog);
   if (recipe.kcal && facts && facts.kcal > 0) {
-    const [min, max] = KCAL_RANGE.main;
+    const [min, max] = KCAL_RANGE[kind];
     // Unrecognised ingredients leave an energy gap; closing more than half of it by upscaling would distort the dish.
     const factor = Math.min(1.5, Math.max(0.6, Math.min(max, Math.max(min, recipe.kcal)) / facts.kcal));
     if (facts.kcal * factor < min) return 'príliš málo rozpoznaných surovín';
     ingredients = ingredients.map((ing) => ({ id: ing.id, grams: Math.max(2, Math.round(ing.grams * factor)) }));
   }
-  const steps = [`Množstvá sú odhad na 1 porciu (rozpoznaných ${recipe.recognised} z ${recipe.total} surovín pôvodného receptu).`, recipe.url];
-  const result = finalize({ name: recipe.name, kind: 'main', ingredients, steps, prepMinutes: recipe.prepMinutes, source: 'yummybox' }, catalog);
+  const steps = [
+    `Množstvá sú prepočítané na 1 porciu (rozpoznaných ${recipe.ingredients.length} z ${recipe.total} surovín pôvodného receptu).`,
+    ...extrasNote(recipe.unmatched), recipe.url,
+  ];
+  const result = finalize({ name: recipe.name, kind, ingredients, steps, prepMinutes: recipe.prepMinutes, source }, catalog);
   if (typeof result === 'string') return result;
-  return save({ ...result.row, ingredientKey: sha(`yummybox|${recipe.url}`) }) ? 'saved' : 'duplicate';
+  return save({ ...result.row, ingredientKey: sha(`web|${recipe.url}`) }) ? 'saved' : 'duplicate';
+}
+
+/** The user's own recipe: free-text ingredient lines are mapped to canonical ingredients and converted to grams per portion. */
+export function saveOwnRecipe(input: OwnRecipeInput, catalog: Catalog): 'saved' | string {
+  const name = input.name.trim();
+  if (name.length < 3) return 'Zadajte názov receptu.';
+  const lines = input.ingredients.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const { mapped, unmatched } = parseIngredientLines(lines, Math.max(1, Math.round(input.portions) || 1), catalog);
+  if (mapped.length < 2) return `Rozpoznané sú len ${mapped.length} z ${lines.length} surovín. Uveďte aspoň dve bežné suroviny s množstvom, napr. 500 g kuracie prsia.`;
+  const steps = [...input.steps.split(/\r?\n/).map((l) => l.trim()).filter(Boolean), ...extrasNote(unmatched)];
+  const result = finalize({ name, kind: input.kind, ingredients: mapped, steps, prepMinutes: input.prepMinutes || 30, source: 'own' }, catalog);
+  if (typeof result === 'string') return result;
+  return save({ ...result.row, ingredientKey: sha(`own|${name.toLowerCase()}`) }) ? 'saved' : 'Recept s týmto názvom už máte uložený.';
 }
 
 export function importedUrls(): Set<string> {
-  return new Set(db.select().from(schema.recipes).all().filter((r) => r.source === 'yummybox').map((r) => r.steps[r.steps.length - 1]));
+  return new Set(db.select().from(schema.recipes).all().filter((r) => r.source === 'yummybox' || r.source === 'web').map((r) => r.steps[r.steps.length - 1]));
 }
 
 export function loadLibrary(catalog: Catalog): { recipe: LibraryRecipe; facts: RecipeFacts }[] {

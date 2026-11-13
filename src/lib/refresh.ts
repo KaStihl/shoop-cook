@@ -17,7 +17,11 @@ interface RefreshState {
 const holder = globalThis as typeof globalThis & { __jedlokosRefresh?: RefreshState };
 export const refreshState: RefreshState = (holder.__jedlokosRefresh ??= { running: false, startedAt: null, lines: [] });
 
-const CRAWLERS: Record<Store, (log: (line: string) => void) => Promise<RawProduct[]>> = { kaufland: crawlKaufland, lidl: crawlLidl };
+const CRAWLERS: Record<Store, (log: (line: string) => void) => Promise<RawProduct[]>> = {
+  kaufland: crawlKaufland, lidl: crawlLidl,
+  billa: async () => { throw new BlockedError('Billa zatiaľ nemá automatické sťahovanie.'); },
+  tesco: async () => { throw new BlockedError('Tesco blokuje automatický prístup (ochrana proti robotom).'); },
+};
 
 /** Incremental refresh: crawl each store, upsert, then map unmapped products and refresh nutrition. */
 export async function runRefresh(stores: Store[] = STORES, echo: (line: string) => void = () => undefined): Promise<void> {

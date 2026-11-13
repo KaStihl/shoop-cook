@@ -10,7 +10,7 @@ interface DealsResponse {
   pageSize: number;
 }
 
-const STORE_STYLE: Record<Store, string> = { kaufland: 'bg-red-50 text-red-700', lidl: 'bg-blue-50 text-blue-700' };
+const STORE_STYLE: Record<Store, string> = { kaufland: 'bg-red-50 text-red-700', lidl: 'bg-blue-50 text-blue-700', billa: 'bg-yellow-50 text-yellow-800', tesco: 'bg-sky-50 text-sky-800' };
 
 export default function DealsPage() {
   const [query, setQuery] = useState('');

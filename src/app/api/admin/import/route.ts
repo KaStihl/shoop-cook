@@ -1,11 +1,10 @@
 import { db, schema } from '@/db';
 import { upsertProducts, type RawProduct } from '@/lib/ingest';
 import { parseCsv } from '@/lib/text';
-import { STORES, type Store } from '@/lib/types';
+import { STORES, STORE_HOME as HOME, type Store } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
-const HOME: Record<Store, string> = { kaufland: 'https://www.kaufland.sk', lidl: 'https://www.lidl.sk' };
 const money = (value: unknown): number => Number(String(value ?? '').replace(',', '.').replace(/[^\d.]/g, ''));
 
 /** Manual import (JSON array or CSV) for offers that cannot be crawled, e.g. copied from a leaflet. */

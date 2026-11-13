@@ -5,12 +5,12 @@ import { db, schema } from '@/db';
 import { CLASSIFY_MODEL, hasLlm, llm } from '@/lib/anthropic';
 import { classifyUnmapped } from '@/lib/classify';
 import { upsertProducts, type RawProduct } from '@/lib/ingest';
-import { STORES, type Store } from '@/lib/types';
+import { STORES, STORE_HOME as HOME, type Store } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 const Receipt = z.object({
-  store: z.enum(['kaufland', 'lidl', 'other']),
+  store: z.enum(['kaufland', 'lidl', 'billa', 'tesco', 'other']),
   date: z.string().nullable(),
   items: z.array(z.object({
     name: z.string(),
@@ -29,7 +29,6 @@ Vráť každú zakúpenú položku práve raz:
 Vynechaj zálohy za obaly, tašky, vrátenia, medzisúčty, DPH a platobné údaje.
 "store" urč z hlavičky bločku, "date" je dátum nákupu vo formáte RRRR-MM-DD.`;
 
-const HOME: Record<Store, string> = { kaufland: 'https://www.kaufland.sk', lidl: 'https://www.lidl.sk' };
 const MEDIA = ['image/jpeg', 'image/png', 'image/webp'] as const;
 const isStore = (value: string): value is Store => (STORES as string[]).includes(value);
 
@@ -56,7 +55,7 @@ export async function POST(request: Request): Promise<Response> {
     const receipt = response.parsed_output;
     if (response.stop_reason === 'refusal' || !receipt) throw new Error('Bloček sa nepodarilo prečítať.');
     const storeName = isStore(body.store ?? '') ? (body.store as Store) : receipt.store;
-    if (!isStore(storeName)) throw new Error('Na bločku sa nepodarilo rozpoznať Kaufland ani Lidl – vyberte obchod ručne.');
+    if (!isStore(storeName)) throw new Error('Na bločku sa nepodarilo rozpoznať podporovaný obchod – vyberte obchod ručne.');
     if (!receipt.items.length) throw new Error('Na fotografii sa nenašli žiadne položky. Skúste ostrejšiu fotku.');
 
     const date = receipt.date && /^\d{4}-\d{2}-\d{2}$/.test(receipt.date) ? receipt.date : null;

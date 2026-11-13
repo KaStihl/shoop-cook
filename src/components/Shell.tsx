@@ -8,6 +8,7 @@ import type { Freshness, MetaResponse } from '@/lib/types';
 
 const NAV = [
   { href: '/', label: 'Plán', icon: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z' },
+  { href: '/recepty', label: 'Recepty', icon: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5zM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5' },
   { href: '/kosik', label: 'Košík', icon: 'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0' },
   { href: '/akcie', label: 'Akcie', icon: 'M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8zM7 7h.01' },
   { href: '/admin', label: 'Admin', icon: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6' },
@@ -55,10 +56,10 @@ export function Shell({ children }: { children: ReactNode }) {
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5">{children}</main>
 
       <footer className="mx-auto w-full max-w-7xl px-4 pb-24 pt-4 text-xs leading-relaxed text-stone-500 sm:pb-6">
-        Ceny sú orientačné a v predajni sa môžu líšiť. JedloKôš nie je prepojený so spoločnosťami Kaufland ani Lidl a nie je nimi prevádzkovaný.
+        Ceny sú orientačné a v predajni sa môžu líšiť. JedloKôš nie je prepojený so spoločnosťami Kaufland, Lidl, Billa ani Tesco a nie je nimi prevádzkovaný.
       </footer>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-stone-200 bg-white sm:hidden print:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-stone-200 bg-white sm:hidden print:hidden">
         {NAV.map((item) => (
           <Link key={item.href} href={item.href}
             className={`flex flex-col items-center gap-0.5 py-2 text-[11px] font-medium ${pathname === item.href ? 'text-brand-700' : 'text-stone-500'}`}>

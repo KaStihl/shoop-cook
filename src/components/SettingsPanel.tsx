@@ -110,6 +110,11 @@ export function SettingsPanel({ settings, onChange, ingredients, busy, onGenerat
           <div className="flex flex-wrap gap-2">
             {STORES.map((s) => <Chip key={s} on={settings.stores.includes(s)} onClick={() => set('stores', toggle(settings.stores, s))}>{STORE_LABEL[s]}</Chip>)}
           </div>
+          <span className="label mt-3">Nákupný košík</span>
+          <div className="flex flex-wrap gap-2">
+            <Chip on={settings.cartMode === 'split'} onClick={() => set('cartMode', 'split')}>Kombinácia – všade najlacnejšie</Chip>
+            <Chip on={settings.cartMode === 'single'} onClick={() => set('cartMode', 'single')}>Všetko z jedného reťazca</Chip>
+          </div>
           <span className="label mt-3">Akciové ceny</span>
           <div className="flex flex-wrap gap-2">
             {DEAL_MODES.map(([value, label]) => <Chip key={value} on={settings.dealMode === value} onClick={() => set('dealMode', value)}>{label}</Chip>)}

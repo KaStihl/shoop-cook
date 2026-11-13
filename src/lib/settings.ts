@@ -30,6 +30,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     batch: s.batch === undefined ? d.batch : Boolean(s.batch),
     pantry: Array.isArray(s.pantry) ? s.pantry.filter((p): p is string => typeof p === 'string').slice(0, 200) : d.pantry,
     stores: subset(s.stores, STORES, d.stores),
+    cartMode: oneOf(s.cartMode, ['split', 'single'] as const, d.cartMode),
     dealMode: oneOf(s.dealMode, ['off', 'prefer', 'only'] as const, d.dealMode),
     dealWeight: clamp(s.dealWeight, 0, 1, d.dealWeight),
   };

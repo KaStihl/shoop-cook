@@ -1,11 +1,13 @@
-export type Store = 'kaufland' | 'lidl';
+export type Store = 'kaufland' | 'lidl' | 'billa' | 'tesco';
+export type CartMode = 'split' | 'single';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type RecipeKind = 'breakfast' | 'main' | 'snack';
 export type Diet = 'all' | 'pescatarian' | 'vegetarian' | 'vegan';
 export type DealMode = 'off' | 'prefer' | 'only';
 
-export const STORES: Store[] = ['kaufland', 'lidl'];
-export const STORE_LABEL: Record<Store | 'odhad', string> = { kaufland: 'Kaufland', lidl: 'Lidl', odhad: 'Bežná cena (odhad)' };
+export const STORES: Store[] = ['kaufland', 'lidl', 'billa', 'tesco'];
+export const STORE_HOME: Record<Store, string> = { kaufland: 'https://www.kaufland.sk', lidl: 'https://www.lidl.sk', billa: 'https://www.billa.sk', tesco: 'https://tesco.sk' };
+export const STORE_LABEL: Record<Store | 'odhad', string> = { kaufland: 'Kaufland', lidl: 'Lidl', billa: 'Billa', tesco: 'Tesco', odhad: 'Bežná cena (odhad)' };
 export const MEALS: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 export const MEAL_LABEL: Record<MealType, string> = { breakfast: 'Raňajky', lunch: 'Obed', dinner: 'Večera', snack: 'Desiata' };
 export const DAY_LABEL = ['Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok', 'Sobota', 'Nedeľa'];
@@ -29,6 +31,8 @@ export interface Settings {
   batch: boolean;
   pantry: string[];
   stores: Store[];
+  /** 'split' buys every item where it is cheapest; 'single' puts the whole cart into the one cheapest chain. */
+  cartMode: CartMode;
   dealMode: DealMode;
   dealWeight: number;
 }
@@ -49,7 +53,8 @@ export const DEFAULT_SETTINGS: Settings = {
   maxRepeats: 2,
   batch: true,
   pantry: ['sol', 'cierne-korenie', 'olej'],
-  stores: ['kaufland', 'lidl'],
+  stores: ['kaufland', 'lidl', 'billa', 'tesco'],
+  cartMode: 'split',
   dealMode: 'prefer',
   dealWeight: 0.5,
 };
@@ -119,6 +124,8 @@ export interface Plan {
   days: PlanDay[];
   cart: Cart;
   budget: number;
+  /** Set when the whole cart comes from one chain (cart mode 'single'). */
+  singleStore: Store | null;
   feasible: boolean;
   minCost: number | null;
   warnings: string[];
@@ -169,4 +176,24 @@ export interface DealItem {
   image: string | null;
   sourceUrl: string;
   ingredient: string | null;
+}
+
+export const SOURCE_LABEL: Record<string, string> = {
+  own: 'vlastný recept', web: 'recept z webu', yummybox: 'recept z yummybox.sk', llm: 'AI recept', rule: 'zostavený zo surovín',
+};
+export const KIND_LABEL: Record<RecipeKind, string> = { breakfast: 'Raňajky', main: 'Obed / večera', snack: 'Desiata' };
+
+export interface RecipeListItem extends Macros {
+  id: number;
+  name: string;
+  kind: RecipeKind;
+  source: string;
+  tags: string[];
+  prepMinutes: number;
+  feedback: number;
+  /** Ingredient cost of one portion at today's cheapest prices. */
+  cost: number;
+  hasDeal: boolean;
+  ingredients: PlanIngredient[];
+  steps: string[];
 }

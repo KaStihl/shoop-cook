@@ -1,5 +1,5 @@
 import { loadCatalog } from '@/lib/catalog';
-import { crawlYummybox } from '@/lib/crawlers/yummybox';
+import { crawlYummybox } from '@/lib/crawlers/webrecipes';
 import { importExternal, importedUrls } from '@/lib/recipes';
 import { STORES } from '@/lib/types';
 

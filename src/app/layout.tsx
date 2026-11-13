@@ -5,7 +5,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'JedloKôš – zdravý jedálniček a najlacnejší nákup',
-  description: 'Týždenný jedálniček a nákupný košík optimalizovaný podľa aktuálnych akcií Kaufland a Lidl.',
+  description: 'Týždenný jedálniček a nákupný košík optimalizovaný podľa aktuálnych akcií Kaufland, Lidl, Billa a Tesco.',
 };
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#059669' };

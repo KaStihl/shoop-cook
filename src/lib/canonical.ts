@@ -127,7 +127,7 @@ export const BUILTIN: IngredientSeed[] = [
   i('sojova-omacka', 'sójová omáčka', DRY, 'staple', [60, 8, 6, 0], 'vegan', ['soy', 'gluten'], 6, 150, 'sojov.*omack'),
 ];
 
-const EXCLUDE = /krmivo|pre psov|pre mack|granule|sampon|lupienky|cokolad|susienk|keks|cukrik|zuvack|dzus|pivo|vino |liker|puding|zmrzlin|pizza|sendvic|pastet|klobas|parky|spekac|slanin|dresing|kecup|majonez|tatarsk|praci|cistic|dekorac|hracka|sviecka|napoj/;
+const EXCLUDE = /mysli|musli|granol|detsk|prikrm|\bdp\b|steriliz|delikates|nakladan|kompot|dzem|lekvar|ochuten|prichut|instant|polievk|hotov\w* jedl|cips|chips|tycink|oblatk|napln|\bcaj\b|ovocn\w* (jogurt|tvaroh)|krmivo|pre psov|pre mack|granule|sampon|lupienky|cokolad|susienk|keks|cukrik|zuvack|dzus|pivo|vino |liker|puding|zmrzlin|pizza|sendvic|pastet|klobas|parky|spekac|slanin|dresing|kecup|majonez|tatarsk|praci|cistic|dekorac|hracka|sviecka|napoj/;
 const NON_FOOD = /moda|byvanie|nabytok|dielna|zahrada|hrack|sport|domacnost|chovatel|drogeri|kozmetik|elektro|auto|textil|obuv|naradie/;
 
 /** Keyword rules: returns the canonical ingredient id or null when no rule applies. */

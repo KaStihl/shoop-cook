@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db';
 import { classifyUnmapped } from './classify';
 import { BlockedError } from './crawlers/http';
+import { crawlBilla } from './crawlers/billa';
 import { crawlKaufland } from './crawlers/kaufland';
 import { crawlLidl } from './crawlers/lidl';
 import { upsertProducts, type RawProduct } from './ingest';
@@ -19,7 +20,7 @@ export const refreshState: RefreshState = (holder.__jedlokosRefresh ??= { runnin
 
 const CRAWLERS: Record<Store, (log: (line: string) => void) => Promise<RawProduct[]>> = {
   kaufland: crawlKaufland, lidl: crawlLidl,
-  billa: async () => { throw new BlockedError('Billa zatiaľ nemá automatické sťahovanie.'); },
+  billa: crawlBilla,
   tesco: async () => { throw new BlockedError('Tesco blokuje automatický prístup (ochrana proti robotom).'); },
 };
 

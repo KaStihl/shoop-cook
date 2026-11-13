@@ -7,8 +7,10 @@
     "dev": "node node_modules/next/dist/bin/next dev",
     "build": "node node_modules/next/dist/bin/next build",
     "start": "node node_modules/next/dist/bin/next start",
+    "app": "node scripts/start.mjs",
     "seed": "node --env-file-if-exists=.env.local --import tsx scripts/seed.ts",
     "refresh": "node --env-file-if-exists=.env.local --import tsx scripts/refresh.ts",
+    "recipes": "node --env-file-if-exists=.env.local --import tsx scripts/recipes.ts",
     "test": "node --env-file-if-exists=.env.local --import tsx scripts/smoke.ts",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit"
   },

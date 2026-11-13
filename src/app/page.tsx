@@ -14,6 +14,7 @@ export default function PlanPage() {
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     api<MetaResponse>('/api/meta').then((meta) => setIngredients(meta.ingredients)).catch(() => setIngredients([]));
@@ -35,8 +36,16 @@ export default function PlanPage() {
   const generate = async () => {
     setBusy(true);
     const clean = sanitizeSettings(settings);
-    const plan = await request({ settings: clean, action: 'generate', slots: stored ? slotsOf(stored) : undefined, seed: Date.now() % 2147483647 });
+    const previous = stored ? slotsOf(stored) : undefined;
+    setNotice(null);
+    const plan = await request({
+      settings: clean, action: 'generate', slots: previous, avoid: previous?.filter((s) => !s.locked).map((s) => s.recipeId), seed: Date.now() % 2147483647,
+    });
     if (plan) {
+      const before = new Map(previous?.map((s) => [slotKey(s.day, s.meal), s.recipeId]));
+      const changed = plan.slots.filter((s) => before.get(slotKey(s.day, s.meal)) !== s.recipeId).length;
+      const time = new Date(plan.generatedAt).toLocaleTimeString('sk-SK');
+      setNotice(previous ? `Nový plán o ${time}: zmenených ${changed} z ${plan.slots.length} jedál, nákup ${plan.cart.total.toFixed(2)} €.` : `Plán vytvorený o ${time}.`);
       const keys = new Set(plan.slots.map((s) => slotKey(s.day, s.meal)));
       setStored({ plan, locks: (stored?.locks ?? []).filter((k) => keys.has(k)), seen: {} });
       localStorage.removeItem('jedlokos.checked');
@@ -83,6 +92,7 @@ export default function PlanPage() {
             {error} <button type="button" className="ml-2 font-semibold underline" onClick={() => setError(null)}>Zavrieť</button>
           </div>
         )}
+        {notice && !error && <p role="status" className="card mb-4 border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 print:hidden">{notice}</p>}
         {!ready || (busy && !stored) ? (
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3" aria-busy="true" aria-label="Načítavam plán">
             {Array.from({ length: 6 }, (_, i) => <div key={i} className="skeleton h-56" />)}

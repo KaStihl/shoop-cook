@@ -137,6 +137,8 @@ export interface PlanRequest {
   slots?: SlotInput[];
   target?: { day: number; meal: MealType };
   exclude?: number[];
+  /** Recipes of the previous plan; a new plan prefers different ones so regenerating visibly changes the week. */
+  avoid?: number[];
   seed?: number;
 }
 

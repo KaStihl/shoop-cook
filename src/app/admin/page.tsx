@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { ReceiptUpload } from '@/components/ReceiptUpload';
 import { api } from '@/lib/client';
 import { STORES, STORE_LABEL, type Freshness, type Store } from '@/lib/types';
 
@@ -171,6 +172,8 @@ export default function AdminPage() {
           <pre className="mt-4 max-h-56 overflow-auto rounded-xl bg-stone-900 p-3 text-[11px] leading-relaxed text-stone-100" aria-live="polite">{status.lines.join('\n')}</pre>
         )}
       </section>
+
+      <ReceiptUpload onDone={() => void load()} />
 
       <section className="card p-4">
         <h2 className="font-bold">Import ponuky</h2>

@@ -65,14 +65,16 @@ function Meal({ slot, locked, busy, onLock, onSwap, onFeedback }: { slot: PlanSl
         <div className="mt-2 rounded-xl bg-stone-50 p-3 text-xs">
           <div className="mb-2 flex flex-wrap gap-1">
             {slot.tags.map((tag) => <span key={tag} className="badge bg-white text-stone-600 ring-1 ring-stone-200">{tag}</span>)}
-            <span className="badge bg-white text-stone-600 ring-1 ring-stone-200">{slot.source === 'llm' ? 'AI recept' : 'pravidlový recept'}</span>
+            <span className="badge bg-white text-stone-600 ring-1 ring-stone-200">{slot.source === 'llm' ? 'AI recept' : slot.source === 'yummybox' ? 'recept z yummybox.sk' : 'pravidlový recept'}</span>
           </div>
           <p className="font-semibold">Suroviny na 1 porciu</p>
           <ul className="mb-2 mt-1 grid grid-cols-1 gap-x-4 sm:grid-cols-2">
             {slot.ingredients.map((ing) => <li key={ing.id} className="flex justify-between"><span>{ing.name}</span><span className="text-stone-500">{amount(ing.grams)}</span></li>)}
           </ul>
           <p className="font-semibold">Postup</p>
-          <ol className="mt-1 list-decimal space-y-1 pl-4">{slot.steps.map((step, i) => <li key={i}>{step}</li>)}</ol>
+          <ol className="mt-1 list-decimal space-y-1 pl-4">{slot.steps.map((step, i) => (
+            <li key={i}>{step.startsWith('https://') ? <a className="font-semibold text-emerald-700 underline" href={step} target="_blank" rel="noreferrer">Pôvodný recept a postup na yummybox.sk</a> : step}</li>
+          ))}</ol>
           <p className="mt-2 text-stone-500">S {slot.carbs} g · T {slot.fat} g · soľ a korenie podľa chuti</p>
           <div className="mt-2 flex gap-2 print:hidden">
             <IconButton icon="heart" label="Páči sa mi" active={slot.feedback > 0} onClick={() => onFeedback(slot, slot.feedback > 0 ? 0 : 1)} />

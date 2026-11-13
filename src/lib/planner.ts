@@ -90,6 +90,8 @@ class Planner {
     return this.pool[kind].map((c, index) => (c.eligible && !exclude.has(c.recipe.id) ? index : -1)).filter((index) => index >= 0);
   }
 
+  avoid = new Set<number>();
+
   indexOf(kind: RecipeKind, recipeId: number): number {
     return this.pool[kind].findIndex((c) => c.recipe.id === recipeId);
   }
@@ -153,7 +155,10 @@ class Planner {
       objective += this.weight * (excess(day.kcal, settings.kcal) + protein + 0.3 * excess(day.carbs, settings.carbs) + 0.3 * excess(day.fat, settings.fat));
     }
     if (variety) {
-      for (const count of uses.values()) objective += Math.max(0, count - settings.maxRepeats) * this.weight * 0.15;
+      for (const [id, count] of uses) {
+        objective += Math.max(0, count - settings.maxRepeats) * this.weight * 0.15;
+        if (this.avoid.has(id)) objective += count * this.weight * 0.012;
+      }
     }
     return { objective, cart, days };
   }
@@ -175,6 +180,7 @@ class Planner {
         const servings = group.slots.reduce((acc, s) => acc + this.scale(this.slots[s], candidate), 0) * this.settings.people;
         const score = candidate.cost * servings * (candidate.hasDeal && this.settings.dealMode !== 'off' ? 1 - 0.3 * this.settings.dealWeight : 1)
           + (variety && used + group.slots.length > this.settings.maxRepeats ? this.weight * 0.15 : 0)
+          + (variety && this.avoid.has(candidate.recipe.id) ? this.weight * 0.012 * group.slots.length : 0)
           - (candidate.recipe.feedback > 0 ? 0.4 : 0) + random() * 0.05;
         if (score < bestScore) { bestScore = score; group.choice = index; }
       }
@@ -267,6 +273,7 @@ export async function generatePlan(request: PlanRequest): Promise<Plan> {
     feasible = evaluation.cart.total <= settings.budget;
   } else {
     const locked = new Map((request.slots ?? []).filter((s) => s.locked).map((s) => [`${s.day}:${s.meal}`, s.recipeId]));
+    planner.avoid = new Set(request.avoid ?? []);
     groups = planner.buildGroups(locked);
     evaluation = planner.search(groups, true, random, 2500);
     if (evaluation.cart.total > settings.budget) {

@@ -38,7 +38,18 @@ interface Draft {
   ingredients: RecipeIngredient[];
   steps: string[];
   prepMinutes: number;
-  source: 'llm' | 'rule';
+  source: 'llm' | 'rule' | 'yummybox';
+}
+
+export interface ExternalRecipe {
+  name: string;
+  url: string;
+  ingredients: RecipeIngredient[];
+  prepMinutes: number;
+  /** Energy per portion published by the source; used to calibrate the estimated amounts. */
+  kcal?: number;
+  recognised: number;
+  total: number;
 }
 
 const DIET_RANK: Record<IngredientDiet, number> = { vegan: 0, vegetarian: 1, fish: 2, meat: 3 };
@@ -118,6 +129,27 @@ function finalize(draft: Draft, catalog: Catalog): { row: typeof schema.recipes.
 
 const save = (row: typeof schema.recipes.$inferInsert): boolean =>
   db.insert(schema.recipes).values(row).onConflictDoNothing().run().changes > 0;
+
+/** Stores a recipe scraped from another site: ingredients and a link back, never the original method text. */
+export function importExternal(recipe: ExternalRecipe, catalog: Catalog): 'saved' | 'duplicate' | string {
+  let { ingredients } = recipe;
+  const facts = computeFacts(ingredients, catalog);
+  if (recipe.kcal && facts && facts.kcal > 0) {
+    const [min, max] = KCAL_RANGE.main;
+    // Unrecognised ingredients leave an energy gap; closing more than half of it by upscaling would distort the dish.
+    const factor = Math.min(1.5, Math.max(0.6, Math.min(max, Math.max(min, recipe.kcal)) / facts.kcal));
+    if (facts.kcal * factor < min) return 'príliš málo rozpoznaných surovín';
+    ingredients = ingredients.map((ing) => ({ id: ing.id, grams: Math.max(2, Math.round(ing.grams * factor)) }));
+  }
+  const steps = [`Množstvá sú odhad na 1 porciu (rozpoznaných ${recipe.recognised} z ${recipe.total} surovín pôvodného receptu).`, recipe.url];
+  const result = finalize({ name: recipe.name, kind: 'main', ingredients, steps, prepMinutes: recipe.prepMinutes, source: 'yummybox' }, catalog);
+  if (typeof result === 'string') return result;
+  return save({ ...result.row, ingredientKey: sha(`yummybox|${recipe.url}`) }) ? 'saved' : 'duplicate';
+}
+
+export function importedUrls(): Set<string> {
+  return new Set(db.select().from(schema.recipes).all().filter((r) => r.source === 'yummybox').map((r) => r.steps[r.steps.length - 1]));
+}
 
 export function loadLibrary(catalog: Catalog): { recipe: LibraryRecipe; facts: RecipeFacts }[] {
   const out: { recipe: LibraryRecipe; facts: RecipeFacts }[] = [];

@@ -1,0 +1,106 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { PlanView } from '@/components/PlanView';
+import { SettingsPanel } from '@/components/SettingsPanel';
+import { api, slotKey, useStored, type StoredPlan } from '@/lib/client';
+import { sanitizeSettings } from '@/lib/settings';
+import { DEFAULT_SETTINGS, type MetaResponse, type Plan, type PlanRequest, type PlanSlot, type Settings } from '@/lib/types';
+
+export default function PlanPage() {
+  const [settings, setSettings, settingsReady] = useStored<Settings>('jedlokos.settings', DEFAULT_SETTINGS, sanitizeSettings);
+  const [stored, setStored, planReady] = useStored<StoredPlan | null>('jedlokos.plan', null);
+  const [ingredients, setIngredients] = useState<MetaResponse['ingredients']>([]);
+  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<MetaResponse>('/api/meta').then((meta) => setIngredients(meta.ingredients)).catch(() => setIngredients([]));
+  }, []);
+
+  const request = useCallback(async (body: PlanRequest): Promise<Plan | null> => {
+    setError(null);
+    try {
+      return await api<Plan>('/api/plan', { method: 'POST', body: JSON.stringify(body) });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Plán sa nepodarilo vytvoriť.');
+      return null;
+    }
+  }, []);
+
+  const slotsOf = (current: StoredPlan) =>
+    current.plan.slots.map((s) => ({ day: s.day, meal: s.meal, recipeId: s.recipeId, locked: current.locks.includes(slotKey(s.day, s.meal)) }));
+
+  const generate = async () => {
+    setBusy(true);
+    const clean = sanitizeSettings(settings);
+    const plan = await request({ settings: clean, action: 'generate', slots: stored ? slotsOf(stored) : undefined, seed: Date.now() % 2147483647 });
+    if (plan) {
+      const keys = new Set(plan.slots.map((s) => slotKey(s.day, s.meal)));
+      setStored({ plan, locks: (stored?.locks ?? []).filter((k) => keys.has(k)), seen: {} });
+      localStorage.removeItem('jedlokos.checked');
+    }
+    setBusy(false);
+  };
+
+  const swap = async (slot: PlanSlot, current: StoredPlan | null = stored) => {
+    if (!current) return;
+    const key = slotKey(slot.day, slot.meal);
+    const seen = [...(current.seen[key] ?? []), slot.recipeId];
+    setPending(key);
+    const plan = await request({ settings: sanitizeSettings(settings), action: 'swap', slots: slotsOf(current), target: { day: slot.day, meal: slot.meal }, exclude: seen });
+    if (plan) setStored({ plan, locks: current.locks, seen: { ...current.seen, [key]: seen } });
+    setPending(null);
+  };
+
+  const toggleLock = (slot: PlanSlot) => {
+    if (!stored) return;
+    const key = slotKey(slot.day, slot.meal);
+    setStored({ ...stored, locks: stored.locks.includes(key) ? stored.locks.filter((k) => k !== key) : [...stored.locks, key] });
+  };
+
+  const feedback = async (slot: PlanSlot, value: number) => {
+    if (!stored) return;
+    try {
+      await api('/api/recipes/feedback', { method: 'POST', body: JSON.stringify({ id: slot.recipeId, value }) });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Hodnotenie sa nepodarilo uložiť.');
+      return;
+    }
+    const next = { ...stored, plan: { ...stored.plan, slots: stored.plan.slots.map((s) => (s.recipeId === slot.recipeId ? { ...s, feedback: value } : s)) } };
+    setStored(next);
+    if (value < 0) await swap(slot, next);
+  };
+
+  const ready = settingsReady && planReady;
+  return (
+    <div className="grid gap-4 lg:grid-cols-[20rem_1fr] lg:items-start">
+      <SettingsPanel settings={settings} onChange={setSettings} ingredients={ingredients} busy={busy || !ready} onGenerate={generate} />
+      <div className="min-w-0">
+        {error && (
+          <div role="alert" className="card mb-4 border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            {error} <button type="button" className="ml-2 font-semibold underline" onClick={() => setError(null)}>Zavrieť</button>
+          </div>
+        )}
+        {!ready || (busy && !stored) ? (
+          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3" aria-busy="true" aria-label="Načítavam plán">
+            {Array.from({ length: 6 }, (_, i) => <div key={i} className="skeleton h-56" />)}
+          </div>
+        ) : stored ? (
+          <div className={busy ? 'pointer-events-none opacity-60 transition' : 'transition'}>
+            <PlanView plan={stored.plan} settings={settings} locks={stored.locks} pending={pending} onLock={toggleLock} onSwap={(slot) => void swap(slot)} onFeedback={(slot, value) => void feedback(slot, value)} />
+          </div>
+        ) : (
+          <section className="card grid place-items-center gap-3 px-6 py-16 text-center">
+            <h1 className="text-xl font-bold">Zostavte si jedálniček na celý týždeň</h1>
+            <p className="max-w-md text-sm text-stone-600">
+              Nastavte rozpočet, ciele a obmedzenia. JedloKôš vyberie jedlá z najlacnejších surovín podľa aktuálnych akcií a pripraví nákupný zoznam.
+            </p>
+            <button type="button" className="btn btn-primary" disabled={busy} onClick={generate}>Vygenerovať plán</button>
+          </section>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,6 +1,6 @@
 import { mapByRules, type Role } from './canonical';
-import type { Catalog, CatalogEntry } from './catalog';
-import { norm } from './text';
+import type { Catalog, CatalogEntry } from './catalog-core';
+import { norm } from './strings';
 
 /** Grams per portion assumed when a recipe gives no usable amount ("1 balenie", "podľa chuti"). */
 const PORTION: Record<Role, number> = {

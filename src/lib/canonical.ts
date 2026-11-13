@@ -1,4 +1,4 @@
-import { norm } from './text';
+import { norm } from './strings';
 
 export const CATEGORIES = ['Mäso a ryby', 'Mliečne a vajcia', 'Ovocie a zelenina', 'Pečivo', 'Trvanlivé', 'Mrazené', 'Ostatné'] as const;
 export const ROLES = [

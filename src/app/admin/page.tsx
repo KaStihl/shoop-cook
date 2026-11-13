@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ReceiptUpload } from '@/components/ReceiptUpload';
-import { api } from '@/lib/client';
+import { IS_STATIC, api } from '@/lib/client';
 import { STORES, STORE_LABEL, type Freshness, type Store } from '@/lib/types';
 
 interface LogRow {
@@ -82,6 +82,18 @@ function IngredientRow({ item, onSaved }: { item: Ingredient; onSaved: () => voi
 }
 
 export default function AdminPage() {
+  if (IS_STATIC) {
+    return (
+      <section className="card grid place-items-center gap-2 px-6 py-16 text-center">
+        <h1 className="text-xl font-bold">Správa dát</h1>
+        <p className="max-w-md text-sm text-stone-600">Online verzia si ceny a akcie obnovuje sama raz denne. Import, bločky a úpravy surovín sú dostupné v lokálnej verzii aplikácie (start.bat).</p>
+      </section>
+    );
+  }
+  return <AdminScreen />;
+}
+
+function AdminScreen() {
   const [status, setStatus] = useState<Status | null>(null);
   const [ingredients, setIngredients] = useState<Ingredient[] | null>(null);
   const [error, setError] = useState<string | null>(null);

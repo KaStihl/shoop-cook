@@ -8,4 +8,5 @@ Týždenný zdravý jedálniček + nákupný košík z najlacnejších surovín 
 6. Obrazovky: `/` plán + nastavenia (localStorage), `/recepty` knižnica receptov (vlastný recept, recept z URL, zaradenie do dňa), `/kosik` košík (odškrtávanie, text, tlač, CSV), `/akcie` ponuka, `/admin` aktualizácia, import, výživové hodnoty a cenník.
 7. Logika: `src/lib/planner.ts` (greedy + lokálne výmeny), `recipes.ts` (LLM navrhuje, kód overuje, knižnica receptov), `catalog.ts` (ceny, balenia, košík).
 8. Databáza `data/jedlokos.db` používa vstavaný `node:sqlite` (žiadne natívne moduly); test: `npm test`, typy: `npm run typecheck`, build: `npm run build`.
-9. Ceny sú orientačné a v predajni sa môžu líšiť; aplikácia nie je prepojená so spoločnosťami Kaufland ani Lidl.
+9. Online verzia bez servera (GitHub Pages): `npm run export && npm run build:static` → `out/`; workflow `.github/workflows/pages.yml` ju nasadí a raz denne obnoví ceny. Plánovač tam beží v prehliadači nad `data/catalog.json`; bločky, import a recept z URL ostávajú v lokálnej verzii.
+10. Ceny sú orientačné a v predajni sa môžu líšiť; aplikácia nie je prepojená so spoločnosťami Kaufland ani Lidl.

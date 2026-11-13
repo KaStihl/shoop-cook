@@ -43,7 +43,11 @@ export function useStored<T>(key: string, initial: T, revive?: (raw: unknown) =>
   return [value, update, ready];
 }
 
+export const IS_STATIC = process.env.NEXT_PUBLIC_STATIC === '1';
+
+/** Calls the server API, or the in-browser backend in the static (GitHub Pages) build. */
 export async function api<T>(url: string, init?: RequestInit): Promise<T> {
+  if (IS_STATIC) return (await import('./static-backend')).staticApi<T>(url, init);
   const response = await fetch(url, init?.body ? { ...init, headers: { 'content-type': 'application/json' } } : init);
   const data = (await response.json().catch(() => ({}))) as T & { error?: string };
   if (!response.ok) throw new Error(data.error ?? `Požiadavka zlyhala (${response.status}).`);

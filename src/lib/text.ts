@@ -1,15 +1,9 @@
 import { createHash } from 'node:crypto';
+import { norm } from './strings';
 
-export const norm = (s: string): string =>
-  s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+export * from './strings';
 
 export const sha = (s: string): string => createHash('sha1').update(s).digest('hex').slice(0, 16);
-
-export const slug = (s: string): string => norm(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-
-export const round2 = (n: number): number => Math.round(n * 100) / 100;
-
-export const today = (): string => new Date().toISOString().slice(0, 10);
 
 export interface Pack {
   qty: number | null;

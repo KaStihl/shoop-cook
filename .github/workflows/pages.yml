@@ -1,0 +1,58 @@
+name: Static site
+
+# Builds the server-less version of JedloKôš and publishes it to GitHub Pages.
+# The scheduled run also refreshes prices; the database it starts from is the copy published by the previous run.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '15 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Restore the database from the published site (or the committed snapshot)
+        run: |
+          mkdir -p data
+          curl -fsSL "https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/data/jedlokos.db" -o data/jedlokos.db \
+            || cp snapshot/jedlokos.db data/jedlokos.db
+      - name: Refresh prices
+        if: github.event_name != 'push'
+        continue-on-error: true
+        run: npm run refresh
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - run: npm run export
+      - name: Build
+        run: NEXT_PUBLIC_BASE_PATH="/${GITHUB_REPOSITORY#*/}" npm run build:static
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

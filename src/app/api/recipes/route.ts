@@ -3,8 +3,8 @@ import { db, schema } from '@/db';
 import { loadCatalog } from '@/lib/catalog';
 import { fetchRecipe } from '@/lib/crawlers/webrecipes';
 import { importExternal, loadLibrary, saveOwnRecipe, type OwnRecipeInput } from '@/lib/recipes';
-import { round2 } from '@/lib/text';
-import { STORES, type RecipeKind, type RecipeListItem } from '@/lib/types';
+import { toListItems } from '@/lib/recipe-core';
+import { STORES, type RecipeKind } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,15 +14,7 @@ const fail = (message: string): Response => Response.json({ error: message }, { 
 /** The whole recipe library with macros and today's cost per portion, recomputed from the database. */
 export function GET(): Response {
   const catalog = loadCatalog(STORES);
-  const items: RecipeListItem[] = loadLibrary(catalog).map(({ recipe, facts }) => ({
-    id: recipe.id, name: recipe.name, kind: recipe.kind, source: recipe.source, tags: recipe.tags, prepMinutes: recipe.prepMinutes, feedback: recipe.feedback,
-    kcal: Math.round(facts.kcal), protein: Math.round(facts.protein), carbs: Math.round(facts.carbs), fat: Math.round(facts.fat),
-    cost: round2(recipe.ingredients.reduce((acc, ing) => acc + (ing.grams / 1000) * (catalog.get(ing.id)?.unitPrice ?? 0), 0)),
-    hasDeal: recipe.ingredients.some((ing) => catalog.get(ing.id)?.hasDeal),
-    ingredients: recipe.ingredients.map((ing) => ({ id: ing.id, name: catalog.get(ing.id)?.name ?? ing.id, grams: ing.grams })),
-    steps: recipe.steps,
-  }));
-  return Response.json(items);
+  return Response.json(toListItems(loadLibrary(catalog), catalog));
 }
 
 /** Adds a recipe from a URL or the user's own text, or deletes an imported/own recipe. */

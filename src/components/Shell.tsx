@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
-import { api, dateSk } from '@/lib/client';
+import { IS_STATIC, api, dateSk } from '@/lib/client';
 import type { Freshness, MetaResponse } from '@/lib/types';
 
 const NAV = [
@@ -11,11 +11,12 @@ const NAV = [
   { href: '/recepty', label: 'Recepty', icon: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5zM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5' },
   { href: '/kosik', label: 'Košík', icon: 'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0' },
   { href: '/akcie', label: 'Akcie', icon: 'M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8zM7 7h.01' },
-  { href: '/admin', label: 'Admin', icon: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6' },
+  ...(IS_STATIC ? [] : [{ href: '/admin', label: 'Admin', icon: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6' }]),
 ];
+const ADMIN_HINT = IS_STATIC ? 'Dáta sa obnovujú automaticky raz denne.' : 'Aktualizujte ponuku v časti Admin.';
 
 export function Shell({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname().replace(/(.)\/$/, '$1');
   const [freshness, setFreshness] = useState<Freshness | null>(null);
 
   useEffect(() => {
@@ -24,7 +25,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const banner = !freshness ? null
     : freshness.productCount === 0 ? 'Databáza je prázdna. Spustite „npm run seed“ alebo aktualizáciu ponuky v časti Admin.'
-    : freshness.stale ? `Ceny sú staršie ako 8 dní (posledná aktualizácia ${dateSk(freshness.lastUpdate)}). Aktualizujte ponuku v časti Admin.`
+    : freshness.stale ? `Ceny sú staršie ako 8 dní (posledná aktualizácia ${dateSk(freshness.lastUpdate)}). ${ADMIN_HINT}`
     : freshness.seedOnly ? 'Zobrazujú sa ukážkové dáta. Pre reálne ceny spustite aktualizáciu v časti Admin.'
     : null;
 
@@ -49,7 +50,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
       {banner && (
         <div role="status" className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900 print:hidden">
-          {banner} {pathname !== '/admin' && <Link href="/admin" className="font-semibold underline">Otvoriť Admin</Link>}
+          {banner} {!IS_STATIC && pathname !== '/admin' && <Link href="/admin" className="font-semibold underline">Otvoriť Admin</Link>}
         </div>
       )}
 
@@ -59,7 +60,7 @@ export function Shell({ children }: { children: ReactNode }) {
         Ceny sú orientačné a v predajni sa môžu líšiť. JedloKôš nie je prepojený so spoločnosťami Kaufland, Lidl, Billa ani Tesco a nie je nimi prevádzkovaný.
       </footer>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-stone-200 bg-white sm:hidden print:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid auto-cols-fr grid-flow-col border-t border-stone-200 bg-white sm:hidden print:hidden">
         {NAV.map((item) => (
           <Link key={item.href} href={item.href}
             className={`flex flex-col items-center gap-0.5 py-2 text-[11px] font-medium ${pathname === item.href ? 'text-brand-700' : 'text-stone-500'}`}>

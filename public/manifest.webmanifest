@@ -1,0 +1,16 @@
+{
+  "name": "JedloKôš – jedálniček a nákup",
+  "short_name": "JedloKôš",
+  "description": "Týždenný jedálniček a nákupný košík podľa aktuálnych akcií.",
+  "lang": "sk",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fafaf9",
+  "theme_color": "#059669",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

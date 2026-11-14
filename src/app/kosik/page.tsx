@@ -74,6 +74,8 @@ export default function CartPage() {
         </div>
       </section>
 
+      {/* Wide screens show the chains side by side; phones and tablets stack them. */}
+      <div className="grid gap-4 xl:grid-cols-2 xl:items-start print:block print:space-y-4">
       {stores.map((store) => {
         const lines = cart.lines.filter((l) => l.store === store);
         const categories = [...new Set(lines.map((l) => l.category))];
@@ -120,6 +122,7 @@ export default function CartPage() {
           </section>
         );
       })}
+      </div>
     </div>
   );
 }

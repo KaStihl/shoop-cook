@@ -260,7 +260,7 @@ export default function RecipesPage() {
           <p className="card p-6 text-center text-sm text-stone-600">Filtru nezodpovedá žiadny recept. Pridajte vlastný alebo ho načítajte z URL.</p>
         ) : (
           <>
-            <ul className="space-y-3">
+            <ul className="grid gap-3 lg:grid-cols-2 lg:items-start">
               {filtered.slice(0, shown).map((recipe) => <RecipeCard key={recipe.id} recipe={recipe} onPlan={addToPlan} onFeedback={(r, v) => void feedback(r, v)} onDelete={(r) => void remove(r)} />)}
             </ul>
             {filtered.length > shown && <button type="button" className="btn btn-ghost w-full" onClick={() => setShown(shown + PAGE)}>Zobraziť ďalšie ({filtered.length - shown})</button>}

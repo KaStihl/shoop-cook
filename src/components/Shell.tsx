@@ -56,11 +56,11 @@ export function Shell({ children }: { children: ReactNode }) {
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5">{children}</main>
 
-      <footer className="mx-auto w-full max-w-7xl px-4 pb-24 pt-4 text-xs leading-relaxed text-stone-500 sm:pb-6">
+      <footer className="mx-auto w-full max-w-7xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-4 text-xs leading-relaxed text-stone-500 sm:pb-6">
         Ceny sú orientačné a v predajni sa môžu líšiť. JedloKôš nie je prepojený so spoločnosťami Kaufland, Lidl, Billa ani Tesco a nie je nimi prevádzkovaný.
       </footer>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid auto-cols-fr grid-flow-col border-t border-stone-200 bg-white sm:hidden print:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid auto-cols-fr grid-flow-col border-t border-stone-200 bg-white pb-[env(safe-area-inset-bottom)] sm:hidden print:hidden">
         {NAV.map((item) => (
           <Link key={item.href} href={item.href}
             className={`flex flex-col items-center gap-0.5 py-2 text-[11px] font-medium ${pathname === item.href ? 'text-brand-700' : 'text-stone-500'}`}>

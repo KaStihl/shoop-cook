@@ -65,13 +65,13 @@ export default function DealsPage() {
       {error && <div role="alert" className="card border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
 
       {loading && !items.length ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">{Array.from({ length: 8 }, (_, i) => <div key={i} className="skeleton h-44" />)}</div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">{Array.from({ length: 8 }, (_, i) => <div key={i} className="skeleton h-44" />)}</div>
       ) : !items.length && !error ? (
         <section className="card px-6 py-12 text-center text-sm text-stone-600">
           Nič sa nenašlo. Skúste iný výraz, vypnite filter „Len akcie“ alebo aktualizujte ponuku v časti Admin.
         </section>
       ) : (
-        <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
           {items.map((item) => (
             <li key={item.id} className="card flex flex-col p-3">
               <div className="mb-2 flex items-center justify-between gap-1">

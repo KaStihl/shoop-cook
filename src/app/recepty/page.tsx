@@ -9,7 +9,7 @@ import {
 } from '@/lib/types';
 
 const KINDS: RecipeKind[] = ['main', 'breakfast', 'snack'];
-const MEALS_OF: Record<RecipeKind, MealType[]> = { breakfast: ['breakfast'], main: ['lunch', 'dinner'], snack: ['snack'] };
+const MEALS_OF: Record<RecipeKind, MealType[]> = { breakfast: ['breakfast'], main: ['lunch', 'dinner'], snack: ['snack', 'afternoon'] };
 const SOURCES = ['own', 'web', 'yummybox', 'llm', 'rule'];
 const PAGE = 30;
 const EMPTY_OWN = { name: '', portions: 4, prepMinutes: 30, ingredients: '', steps: '' };
@@ -135,8 +135,8 @@ export default function RecipesPage() {
   /** Puts the recipe into one slot, keeps every other meal as it is and lets the server recompute portions and the cart. */
   const addToPlan = async (recipe: RecipeListItem, day: number, meal: MealType) => {
     setMessage(null);
-    if (!settings.meals.includes(meal)) {
-      setMessage({ ok: false, text: `${MEAL_LABEL[meal]} nemáte v nastaveniach plánu zapnuté.` });
+    if (!settings.dayMeals[day]?.includes(meal)) {
+      setMessage({ ok: false, text: `${DAY_LABEL[day]}: ${MEAL_LABEL[meal].toLowerCase()} nemáte v nastaveniach plánu zapnuté.` });
       return;
     }
     const key = slotKey(day, meal);

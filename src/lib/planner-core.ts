@@ -2,13 +2,15 @@ import { buildCart, type Catalog } from './catalog-core';
 import { violation, type LibraryRecipe, type RecipeFacts } from './recipe-core';
 import { round2 } from './strings';
 import type { Cart, Macros, MealType, Plan, PlanDay, PlanRequest, PlanSlot, RecipeKind, Settings, Store } from './types';
-import { MEALS, STORE_LABEL } from './types';
+import { MEALS, STORE_LABEL, kindOfMeal } from './types';
 
 const DAYS = 7;
 /** Share of the budget a generated filler recipe costs per slot compared with a real recipe. */
 const GENERATED_PENALTY = 0.02;
-const SHARE: Record<MealType, number> = { breakfast: 0.25, lunch: 0.35, dinner: 0.3, snack: 0.1 };
-const kindOf = (meal: MealType): RecipeKind => (meal === 'lunch' || meal === 'dinner' ? 'main' : meal);
+const SHARE: Record<MealType, number> = { breakfast: 0.25, snack: 0.1, lunch: 0.35, afternoon: 0.1, dinner: 0.3 };
+/** Breakfast + lunch + dinner already count as a full day; lighter days cover only their part of the targets. */
+const FULL_DAY = 0.9;
+const kindOf = kindOfMeal;
 
 export interface LibraryEntry {
   recipe: LibraryRecipe;
@@ -66,14 +68,19 @@ class Planner {
   private readonly slots: Slot[];
   private readonly pool: Record<RecipeKind, Candidate[]> = { breakfast: [], main: [], snack: [] };
   private readonly weight: number;
+  /** Part of the daily targets each day's meals should cover. */
+  private readonly dayShare: number[];
   readonly warnings: string[] = [];
 
   constructor(private readonly settings: Settings, private readonly catalog: Catalog, library: LibraryEntry[]) {
     this.pantry = new Set(settings.pantry);
     this.weight = Math.max(settings.budget, 40);
-    const meals = MEALS.filter((m) => settings.meals.includes(m));
-    const shareSum = meals.reduce((acc, m) => acc + SHARE[m], 0);
-    this.slots = Array.from({ length: DAYS }, (_, day) => meals.map((meal) => ({ day, meal, targetKcal: (settings.kcal * SHARE[meal]) / shareSum }))).flat();
+    const perDay = Array.from({ length: DAYS }, (_, day) => MEALS.filter((m) => settings.dayMeals[day]?.includes(m)));
+    const sums = perDay.map((meals) => meals.reduce((acc, m) => acc + SHARE[m], 0));
+    // A day with three main meals or more is a full day and is normalised on its own; lighter days cover only their part.
+    const full = sums.map((sum) => Math.max(FULL_DAY, sum));
+    this.dayShare = sums.map((sum, day) => sum / full[day]);
+    this.slots = perDay.flatMap((meals, day) => meals.map((meal) => ({ day, meal, targetKcal: (settings.kcal * SHARE[meal]) / full[day] })));
 
     for (const { recipe, facts } of library) {
       const entries = recipe.ingredients.map((ing) => ({ ing, entry: catalog.get(ing.id) }));
@@ -168,10 +175,13 @@ class Planner {
     if (settings.dealMode === 'prefer') objective -= settings.dealWeight * 0.3 * cart.lines.reduce((acc, l) => acc + (l.isDeal ? l.lineTotal : 0), 0);
     // Soft constraints: anything beyond the ±10 % tolerance costs "virtual euros" proportional to the budget.
     const excess = (value: number, target: number) => (target > 0 ? Math.max(0, Math.abs(value - target) / target - 0.1) : 0);
-    for (const day of days) {
-      const protein = excess(day.protein, settings.protein) * (day.protein < settings.protein ? 1 : 0.3);
-      objective += this.weight * (excess(day.kcal, settings.kcal) + protein + 0.3 * excess(day.carbs, settings.carbs) + 0.3 * excess(day.fat, settings.fat));
-    }
+    days.forEach((day, index) => {
+      const share = this.dayShare[index];
+      if (!share) return;
+      const protein = excess(day.protein, settings.protein * share) * (day.protein < settings.protein * share ? 1 : 0.3);
+      objective += this.weight * share
+        * (excess(day.kcal, settings.kcal * share) + protein + 0.3 * excess(day.carbs, settings.carbs * share) + 0.3 * excess(day.fat, settings.fat * share));
+    });
     if (variety) {
       for (const [id, count] of uses) {
         objective += Math.max(0, count - settings.maxRepeats) * this.weight * 0.15;
@@ -251,7 +261,15 @@ class Planner {
           carbs: Math.round(candidate.facts.carbs * scale), fat: Math.round(candidate.facts.fat * scale),
           cost: round2(candidate.cost * scale * people), prepMinutes: candidate.recipe.prepMinutes, tags: candidate.recipe.tags,
           source: candidate.recipe.source, feedback: candidate.recipe.feedback, hasDeal: candidate.hasDeal,
-          ingredients: candidate.recipe.ingredients.map((ing) => ({ id: ing.id, name: this.catalog.get(ing.id)?.name ?? ing.id, grams: Math.round(ing.grams * scale) })),
+          ingredients: candidate.recipe.ingredients.map((ing) => {
+            const entry = this.catalog.get(ing.id);
+            const part = (ing.grams * scale) / 100;
+            const of = (value: number | undefined) => Math.round((value ?? 0) * part * 10) / 10;
+            return {
+              id: ing.id, name: entry?.name ?? ing.id, grams: Math.round(ing.grams * scale),
+              kcal: Math.round((entry?.macros?.kcal ?? 0) * part), protein: of(entry?.macros?.protein), carbs: of(entry?.macros?.carbs), fat: of(entry?.macros?.fat),
+            };
+          }),
           steps: candidate.recipe.steps,
         });
       }
@@ -260,6 +278,7 @@ class Planner {
     const days: PlanDay[] = evaluation.days.map((d, day) => ({
       kcal: Math.round(d.kcal), protein: Math.round(d.protein), carbs: Math.round(d.carbs), fat: Math.round(d.fat),
       cost: round2(slots.filter((s) => s.day === day).reduce((acc, s) => acc + s.cost, 0)),
+      share: this.dayShare[day],
     }));
     return { slots, days, cart: evaluation.cart };
   }

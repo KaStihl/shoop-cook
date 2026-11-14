@@ -13,7 +13,7 @@ import {
 
 export { computeFacts, violation, type LibraryRecipe, type OwnRecipeInput, type RecipeFacts, type RecipeIngredient } from './recipe-core';
 import { sha } from './text';
-import type { Macros, RecipeKind, Settings } from './types';
+import { kindOfMeal, type Macros, type RecipeKind, type Settings } from './types';
 
 export interface ExternalRecipe {
   name: string;
@@ -229,7 +229,7 @@ function generateByRules(kind: RecipeKind, catalog: Catalog): number {
 /** Library first; new recipes are generated only to fill gaps for the current constraints. */
 export async function ensureLibrary(settings: Settings, catalog: Catalog): Promise<string[]> {
   const notes: string[] = [];
-  const kinds = new Set<RecipeKind>(settings.meals.map((m) => (m === 'lunch' || m === 'dinner' ? 'main' : m)));
+  const kinds = new Set<RecipeKind>(settings.meals.map(kindOfMeal));
   const eligible = (kind: RecipeKind) => loadLibrary(catalog)
     .filter(({ recipe, facts }) => recipe.kind === kind && recipe.feedback >= 0 && !violation(facts, recipe.prepMinutes, settings)).length;
   for (const kind of kinds) {

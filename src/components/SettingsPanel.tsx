@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { ALLERGENS, ALLERGEN_LABEL, MEALS, MEAL_LABEL, STORES, STORE_LABEL, type DealMode, type Diet, type MetaResponse, type Settings } from '@/lib/types';
+import { ALLERGENS, ALLERGEN_LABEL, DAY_LABEL, MEALS, MEAL_LABEL, STORES, STORE_LABEL, type DealMode, type Diet, type MealType, type MetaResponse, type Settings } from '@/lib/types';
 
 interface Props {
   settings: Settings;
@@ -46,6 +46,14 @@ export function SettingsPanel({ settings, onChange, ingredients, busy, onGenerat
     const fat = Math.round((kcal * 0.3) / 9);
     onChange({ ...settings, kcal, protein, fat, carbs: Math.max(20, Math.round((kcal - protein * 4 - fat * 9) / 4)) });
   };
+  // Meals are chosen per day; the chips above the grid switch a meal on or off for the whole week at once.
+  const setDayMeals = (dayMeals: MealType[][]) => onChange({ ...settings, dayMeals, meals: MEALS.filter((m) => dayMeals.some((day) => day.includes(m))) });
+  const everyDay = (meal: MealType) => settings.dayMeals.every((day) => day.includes(meal));
+  const toggleWeek = (meal: MealType) => {
+    const on = !everyDay(meal);
+    setDayMeals(settings.dayMeals.map((day) => (on ? MEALS.filter((m) => m === meal || day.includes(m)) : day.filter((m) => m !== meal))));
+  };
+  const toggleDay = (index: number, meal: MealType) => setDayMeals(settings.dayMeals.map((day, i) => (i === index ? MEALS.filter((m) => (m === meal ? !day.includes(m) : day.includes(m))) : day)));
   const pantryOptions = ingredients.filter((i) => settings.pantry.includes(i.id) || (pantryQuery.length > 1 && i.name.includes(pantryQuery.toLowerCase()))).slice(0, 24);
 
   return (
@@ -95,8 +103,31 @@ export function SettingsPanel({ settings, onChange, ingredients, busy, onGenerat
 
         <Section title="Jedlá a varenie">
           <div className="flex flex-wrap gap-2">
-            {MEALS.map((m) => <Chip key={m} on={settings.meals.includes(m)} onClick={() => set('meals', toggle(settings.meals, m))}>{MEAL_LABEL[m]}</Chip>)}
+            {MEALS.map((m) => <Chip key={m} on={everyDay(m)} onClick={() => toggleWeek(m)}>{MEAL_LABEL[m]}</Chip>)}
           </div>
+          <span className="label mt-3">Jedlá podľa dní</span>
+          <table className="w-full text-center text-xs">
+            <thead>
+              <tr className="text-stone-500">
+                <th className="py-1 text-left font-medium">Deň</th>
+                {MEALS.map((m) => <th key={m} className="font-medium" title={MEAL_LABEL[m]}>{MEAL_LABEL[m].slice(0, 3)}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {DAY_LABEL.map((label, day) => (
+                <tr key={label} className="border-t border-stone-100">
+                  <th scope="row" className="py-1 text-left font-medium">{label}</th>
+                  {MEALS.map((m) => (
+                    <td key={m}>
+                      <input type="checkbox" className="h-4 w-4 accent-emerald-600" aria-label={`${label}: ${MEAL_LABEL[m]}`}
+                        checked={settings.dayMeals[day].includes(m)} onChange={() => toggleDay(day, m)} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-1 text-xs text-stone-500">Deň s menej jedlami pokrýva len príslušnú časť denných cieľov.</p>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <Num label="Max. čas prípravy" suffix="min" value={settings.maxPrep} step={5} onChange={(v) => set('maxPrep', v)} />
             <Num label="Max. opakovaní jedla" value={settings.maxRepeats} onChange={(v) => set('maxRepeats', v)} />

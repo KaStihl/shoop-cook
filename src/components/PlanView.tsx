@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { amount, eur, slotKey } from '@/lib/client';
-import { DAY_LABEL, MEAL_LABEL, SOURCE_LABEL, type Plan, type PlanSlot, type RecipeListItem, type Settings } from '@/lib/types';
+import { dateOfDay, hybridLink, hybridText, toHybridMeal } from '@/lib/hybridlog';
+import { DAY_LABEL, MEAL_LABEL, SOURCE_LABEL, kindOfMeal, type Plan, type PlanSlot, type RecipeListItem, type Settings } from '@/lib/types';
 
 interface Props {
   plan: Plan;
@@ -26,6 +27,7 @@ const ICONS = {
   heart: 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.3l7.8-7.8 1-1.1a5.5 5.5 0 0 0 0-7.8z',
   ban: 'M4.9 4.9l14.2 14.2M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z',
   pick: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
+  log: 'M12 5v14M5 12h14M4 4h16v16H4z',
 };
 
 function IconButton({ icon, label, active, disabled, onClick }: { icon: keyof typeof ICONS; label: string; active?: boolean; disabled?: boolean; onClick: () => void }) {
@@ -40,7 +42,7 @@ function IconButton({ icon, label, active, disabled, onClick }: { icon: keyof ty
 }
 
 function Macro({ label, value, target, unit }: { label: string; value: number; target: number; unit: string }) {
-  const off = Math.abs(value - target) / target > 0.1;
+  const off = target > 0 && Math.abs(value - target) / target > 0.1;
   return (
     <span className={off ? 'font-semibold text-amber-700' : ''} title={`Cieľ ${target} ${unit}${off ? ' – mimo tolerancie ±10 %' : ''}`}>
       {label} {value} {unit}
@@ -53,7 +55,7 @@ function Picker({ slot, recipes, busy, onPick, onUrl }: { slot: PlanSlot; busy: 
   const [query, setQuery] = useState('');
   const [chosen, setChosen] = useState('');
   const [url, setUrl] = useState('');
-  const kind = slot.meal === 'lunch' || slot.meal === 'dinner' ? 'main' : slot.meal;
+  const kind = kindOfMeal(slot.meal);
   const options = useMemo(() => {
     const q = query.trim().toLowerCase();
     return recipes.filter((r) => r.kind === kind && r.feedback >= 0 && r.id !== slot.recipeId && (!q || r.name.toLowerCase().includes(q) || r.ingredients.some((i) => i.name.includes(q))))
@@ -124,8 +126,50 @@ function Meal({ slot, locked, busy, onLock, onSwap, onFeedback, recipes, onPick,
   );
 }
 
+/** Sends a day's planned meals to HybridLog: an import link plus a text copy as a fallback. */
+function HybridLogPanel({ day, slots }: { day: number; slots: PlanSlot[] }) {
+  const [date, setDate] = useState(() => dateOfDay(day));
+  const [chosen, setChosen] = useState(() => slots.map((s) => s.meal));
+  const [copied, setCopied] = useState(false);
+  const picked = slots.filter((s) => chosen.includes(s.meal));
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(hybridText(picked));
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <div className="space-y-2 border-b border-stone-100 bg-brand-50/40 px-3 py-2.5 text-xs print:hidden">
+      <p className="font-semibold">Zapísať do HybridLogu</p>
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {slots.map((s) => (
+          <label key={s.meal} className="flex items-center gap-1">
+            <input type="checkbox" className="accent-emerald-600" checked={chosen.includes(s.meal)}
+              onChange={() => setChosen(chosen.includes(s.meal) ? chosen.filter((m) => m !== s.meal) : [...chosen, s.meal])} />
+            {MEAL_LABEL[s.meal]}
+          </label>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="block">
+          <span className="label">Dátum</span>
+          <input type="date" className="input !w-auto" value={date} onChange={(e) => setDate(e.target.value)} />
+        </label>
+        {picked.length > 0 && date ? (
+          <a className="btn btn-primary" href={hybridLink(picked.map((s) => toHybridMeal(s, date)))} target="_blank" rel="noreferrer" onClick={() => void copy()}>Otvoriť HybridLog</a>
+        ) : <span className="btn btn-primary pointer-events-none opacity-50">Otvoriť HybridLog</span>}
+        <button type="button" className="btn btn-ghost" disabled={!picked.length} onClick={() => void copy()}>{copied ? 'Skopírované' : 'Kopírovať text'}</button>
+      </div>
+      <p className="text-stone-500">Porcie sú na 1 osobu. Jedlá sa pošlú s gramážou a makrami; text ostane v schránke ako záloha.</p>
+    </div>
+  );
+}
+
 export function PlanView({ plan, settings, locks, pending, onLock, onSwap, onFeedback, recipes, onPick, onUrl }: Props) {
   const ratio = Math.min(1, plan.cart.total / plan.budget);
+  const [logDay, setLogDay] = useState<number | null>(null);
   return (
     <div className="space-y-4">
       <section className="card p-4">
@@ -152,28 +196,37 @@ export function PlanView({ plan, settings, locks, pending, onLock, onSwap, onFee
       </section>
 
       <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-        {plan.days.map((day, index) => (
+        {plan.days.map((day, index) => {
+          const slots = plan.slots.filter((s) => s.day === index);
+          const share = day.share ?? 1;
+          return (
           <section key={index} className="card overflow-hidden">
             <header className="border-b border-stone-100 bg-stone-50/60 px-3 py-2">
               <div className="flex items-baseline justify-between">
                 <h2 className="text-sm font-bold">{DAY_LABEL[index]}</h2>
-                <span className="text-sm font-semibold text-stone-700">{eur(day.cost)}</span>
+                <span className="flex items-center gap-2 text-sm font-semibold text-stone-700">
+                  {eur(day.cost)}
+                  {slots.length > 0 && <IconButton icon="log" label="Zapísať deň do HybridLogu" active={logDay === index} onClick={() => setLogDay(logDay === index ? null : index)} />}
+                </span>
               </div>
               <p className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-stone-500">
-                <Macro label="" value={day.kcal} target={settings.kcal} unit="kcal" />
-                <Macro label="B" value={day.protein} target={settings.protein} unit="g" />
-                <Macro label="S" value={day.carbs} target={settings.carbs} unit="g" />
-                <Macro label="T" value={day.fat} target={settings.fat} unit="g" />
+                <Macro label="" value={day.kcal} target={Math.round(settings.kcal * share)} unit="kcal" />
+                <Macro label="B" value={day.protein} target={Math.round(settings.protein * share)} unit="g" />
+                <Macro label="S" value={day.carbs} target={Math.round(settings.carbs * share)} unit="g" />
+                <Macro label="T" value={day.fat} target={Math.round(settings.fat * share)} unit="g" />
               </p>
             </header>
+            {logDay === index && <HybridLogPanel day={index} slots={slots} />}
+            {!slots.length && <p className="px-3 py-4 text-xs text-stone-500">Na tento deň nie je naplánované žiadne jedlo.</p>}
             <ul className="divide-y divide-stone-100">
-              {plan.slots.filter((s) => s.day === index).map((slot) => {
+              {slots.map((slot) => {
                 const key = slotKey(slot.day, slot.meal);
                 return <Meal key={key} slot={slot} locked={locks.includes(key)} busy={pending === key} onLock={onLock} onSwap={onSwap} onFeedback={onFeedback} recipes={recipes} onPick={onPick} onUrl={onUrl} />;
               })}
             </ul>
           </section>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

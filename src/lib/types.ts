@@ -1,6 +1,6 @@
 export type Store = 'kaufland' | 'lidl' | 'billa' | 'tesco';
 export type CartMode = 'split' | 'single';
-export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+export type MealType = 'breakfast' | 'snack' | 'lunch' | 'afternoon' | 'dinner';
 export type RecipeKind = 'breakfast' | 'main' | 'snack';
 export type Diet = 'all' | 'pescatarian' | 'vegetarian' | 'vegan';
 export type DealMode = 'off' | 'prefer' | 'only';
@@ -8,8 +8,10 @@ export type DealMode = 'off' | 'prefer' | 'only';
 export const STORES: Store[] = ['kaufland', 'lidl', 'billa', 'tesco'];
 export const STORE_HOME: Record<Store, string> = { kaufland: 'https://www.kaufland.sk', lidl: 'https://www.lidl.sk', billa: 'https://www.billa.sk', tesco: 'https://tesco.sk' };
 export const STORE_LABEL: Record<Store | 'odhad', string> = { kaufland: 'Kaufland', lidl: 'Lidl', billa: 'Billa', tesco: 'Tesco', odhad: 'Bežná cena (odhad)' };
-export const MEALS: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
-export const MEAL_LABEL: Record<MealType, string> = { breakfast: 'Raňajky', lunch: 'Obed', dinner: 'Večera', snack: 'Desiata' };
+/** Meals of the day in the order they are eaten. */
+export const MEALS: MealType[] = ['breakfast', 'snack', 'lunch', 'afternoon', 'dinner'];
+export const kindOfMeal = (meal: MealType): RecipeKind => (meal === 'lunch' || meal === 'dinner' ? 'main' : meal === 'breakfast' ? 'breakfast' : 'snack');
+export const MEAL_LABEL: Record<MealType, string> = { breakfast: 'Raňajky', snack: 'Desiata', lunch: 'Obed', afternoon: 'Olovrant', dinner: 'Večera' };
 export const DAY_LABEL = ['Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok', 'Sobota', 'Nedeľa'];
 export const ALLERGENS = ['milk', 'gluten', 'egg', 'fish', 'nuts', 'soy'] as const;
 export const ALLERGEN_LABEL: Record<string, string> = { milk: 'mlieko', gluten: 'lepok', egg: 'vajcia', fish: 'ryby', nuts: 'orechy', soy: 'sója' };
@@ -26,7 +28,10 @@ export interface Settings {
   glutenFree: boolean;
   allergens: string[];
   maxPrep: number;
+  /** Every meal planned on at least one day (derived from `dayMeals`). */
   meals: MealType[];
+  /** Meals planned on each day, Monday first; a day may have any subset, or none. */
+  dayMeals: MealType[][];
   maxRepeats: number;
   batch: boolean;
   pantry: string[];
@@ -50,6 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   allergens: [],
   maxPrep: 45,
   meals: ['breakfast', 'lunch', 'dinner'],
+  dayMeals: Array.from({ length: 7 }, (): MealType[] => ['breakfast', 'lunch', 'dinner']),
   maxRepeats: 2,
   batch: true,
   pantry: ['sol', 'cierne-korenie', 'olej'],
@@ -70,6 +76,11 @@ export interface PlanIngredient {
   id: string;
   name: string;
   grams: number;
+  /** Macros of this amount; absent in plans stored before they were added. */
+  kcal?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
 }
 
 export interface PlanSlot extends Macros {
@@ -90,6 +101,8 @@ export interface PlanSlot extends Macros {
 
 export interface PlanDay extends Macros {
   cost: number;
+  /** Part of the daily targets this day's planned meals should cover (1 = a full day). */
+  share?: number;
 }
 
 export interface CartLine {

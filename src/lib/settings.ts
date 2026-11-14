@@ -1,4 +1,4 @@
-import { ALLERGENS, DEFAULT_SETTINGS, MEALS, STORES, type Settings } from './types';
+import { ALLERGENS, DEFAULT_SETTINGS, MEALS, STORES, type MealType, type Settings } from './types';
 
 const clamp = (value: unknown, min: number, max: number, fallback: number): number => {
   const n = Number(value);
@@ -13,6 +13,11 @@ const oneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback
 export function sanitizeSettings(raw: unknown): Settings {
   const s = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const d = DEFAULT_SETTINGS;
+  // Older stored settings have one meal list for the whole week; it becomes the choice for every day.
+  const everyDay = subset(s.meals, MEALS, d.meals);
+  const dayMeals: MealType[][] = Array.isArray(s.dayMeals) && s.dayMeals.length === 7
+    ? s.dayMeals.map((day) => subset(day, MEALS, everyDay))
+    : Array.from({ length: 7 }, () => [...everyDay]);
   return {
     people: Math.round(clamp(s.people, 1, 8, d.people)),
     budget: clamp(s.budget, 10, 1000, d.budget),
@@ -25,7 +30,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     glutenFree: Boolean(s.glutenFree),
     allergens: subset(s.allergens, ALLERGENS, d.allergens as (typeof ALLERGENS)[number][]),
     maxPrep: clamp(s.maxPrep, 10, 180, d.maxPrep),
-    meals: subset(s.meals, MEALS, d.meals),
+    meals: MEALS.filter((m) => dayMeals.some((day) => day.includes(m))),
+    dayMeals,
     maxRepeats: Math.round(clamp(s.maxRepeats, 1, 7, d.maxRepeats)),
     batch: s.batch === undefined ? d.batch : Boolean(s.batch),
     pantry: Array.isArray(s.pantry) ? s.pantry.filter((p): p is string => typeof p === 'string').slice(0, 200) : d.pantry,

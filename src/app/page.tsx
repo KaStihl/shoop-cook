@@ -5,7 +5,7 @@ import { PlanView } from '@/components/PlanView';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { api, slotKey, useStored, type StoredPlan } from '@/lib/client';
 import { sanitizeSettings } from '@/lib/settings';
-import { DEFAULT_SETTINGS, type MetaResponse, type Plan, type PlanRequest, type PlanSlot, type RecipeListItem, type Settings } from '@/lib/types';
+import { DEFAULT_SETTINGS, kindOfMeal, type MetaResponse, type Plan, type PlanRequest, type PlanSlot, type RecipeListItem, type Settings } from '@/lib/types';
 
 export default function PlanPage() {
   const [settings, setSettings, settingsReady] = useStored<Settings>('jedlokos.settings', DEFAULT_SETTINGS, sanitizeSettings);
@@ -90,7 +90,7 @@ export default function PlanPage() {
     setPending(key);
     setError(null);
     try {
-      const kind = slot.meal === 'lunch' || slot.meal === 'dinner' ? 'main' : slot.meal;
+      const kind = kindOfMeal(slot.meal);
       const added = await api<{ id: number }>('/api/recipes', { method: 'POST', body: JSON.stringify({ action: 'url', url, kind }) });
       await loadRecipes();
       await pick(slot, added.id);

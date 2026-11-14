@@ -27,9 +27,10 @@ export async function POST(request: Request): Promise<Response> {
       if (!body.url?.trim()) return fail('Zadajte adresu receptu.');
       const recipe = await fetchRecipe(body.url.trim(), catalog);
       const result = importExternal(recipe, catalog, 'web', kind);
-      if (result === 'duplicate') return fail('Tento recept už v knižnici máte.');
-      if (result !== 'saved') return fail(`Recept sa nedá použiť: ${result}.`);
-      return Response.json({ name: recipe.name, recognised: recipe.ingredients.length, total: recipe.total });
+      if (result !== 'saved' && result !== 'duplicate') return fail(`Recept sa nedá použiť: ${result}.`);
+      // A recipe imported earlier is returned as it is, so the plan can use it straight away.
+      const row = db.select({ id: schema.recipes.id, steps: schema.recipes.steps }).from(schema.recipes).all().find((r) => r.steps[r.steps.length - 1] === recipe.url);
+      return Response.json({ id: row?.id, name: recipe.name, recognised: recipe.ingredients.length, total: recipe.total });
     }
     if (body.action === 'own' && body.recipe) {
       const result = saveOwnRecipe({ ...body.recipe, kind }, catalog);

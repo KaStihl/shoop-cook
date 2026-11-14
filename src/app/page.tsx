@@ -5,7 +5,7 @@ import { PlanView } from '@/components/PlanView';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { api, slotKey, useStored, type StoredPlan } from '@/lib/client';
 import { sanitizeSettings } from '@/lib/settings';
-import { DEFAULT_SETTINGS, type MetaResponse, type Plan, type PlanRequest, type PlanSlot, type Settings } from '@/lib/types';
+import { DEFAULT_SETTINGS, type MetaResponse, type Plan, type PlanRequest, type PlanSlot, type RecipeListItem, type Settings } from '@/lib/types';
 
 export default function PlanPage() {
   const [settings, setSettings, settingsReady] = useStored<Settings>('jedlokos.settings', DEFAULT_SETTINGS, sanitizeSettings);
@@ -15,6 +15,10 @@ export default function PlanPage() {
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [recipes, setRecipes] = useState<RecipeListItem[]>([]);
+
+  const loadRecipes = useCallback(() => api<RecipeListItem[]>('/api/recipes').then((list) => { setRecipes(list); return list; }).catch(() => [] as RecipeListItem[]), []);
+  useEffect(() => { void loadRecipes(); }, [loadRecipes]);
 
   useEffect(() => {
     api<MetaResponse>('/api/meta').then((meta) => setIngredients(meta.ingredients)).catch(() => setIngredients([]));
@@ -63,6 +67,39 @@ export default function PlanPage() {
     setPending(null);
   };
 
+  /** Puts a chosen recipe into one meal, keeps everything else and lets the planner recompute portions and the cart. */
+  const pick = async (slot: PlanSlot, recipeId: number) => {
+    if (!stored) return;
+    const key = slotKey(slot.day, slot.meal);
+    setPending(key);
+    setNotice(null);
+    const slots = slotsOf(stored).map((s) => ({ ...s, recipeId: s.day === slot.day && s.meal === slot.meal ? recipeId : s.recipeId, locked: true }));
+    const plan = await request({ settings: sanitizeSettings(settings), action: 'generate', slots, seed: Date.now() % 2147483647 });
+    const placed = plan?.slots.find((s) => s.day === slot.day && s.meal === slot.meal);
+    if (plan && placed?.recipeId === recipeId) {
+      setStored({ plan, locks: [...new Set([...stored.locks, key])], seen: stored.seen });
+      setNotice(`${placed.name} je zaradené a zamknuté. Porcie aj košík sú prepočítané (nákup ${plan.cart.total.toFixed(2)} €).`);
+    } else if (plan) {
+      setError('Recept nevyhovuje aktuálnym nastaveniam (diéta, alergény alebo čas prípravy).');
+    }
+    setPending(null);
+  };
+
+  const pickFromUrl = async (slot: PlanSlot, url: string) => {
+    const key = slotKey(slot.day, slot.meal);
+    setPending(key);
+    setError(null);
+    try {
+      const kind = slot.meal === 'lunch' || slot.meal === 'dinner' ? 'main' : slot.meal;
+      const added = await api<{ id: number }>('/api/recipes', { method: 'POST', body: JSON.stringify({ action: 'url', url, kind }) });
+      await loadRecipes();
+      await pick(slot, added.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Recept sa nepodarilo načítať.');
+      setPending(null);
+    }
+  };
+
   const toggleLock = (slot: PlanSlot) => {
     if (!stored) return;
     const key = slotKey(slot.day, slot.meal);
@@ -99,7 +136,8 @@ export default function PlanPage() {
           </div>
         ) : stored ? (
           <div className={busy ? 'pointer-events-none opacity-60 transition' : 'transition'}>
-            <PlanView plan={stored.plan} settings={settings} locks={stored.locks} pending={pending} onLock={toggleLock} onSwap={(slot) => void swap(slot)} onFeedback={(slot, value) => void feedback(slot, value)} />
+            <PlanView plan={stored.plan} settings={settings} locks={stored.locks} pending={pending} onLock={toggleLock} onSwap={(slot) => void swap(slot)} onFeedback={(slot, value) => void feedback(slot, value)}
+              recipes={recipes} onPick={(slot, id) => void pick(slot, id)} onUrl={(slot, url) => void pickFromUrl(slot, url)} />
           </div>
         ) : (
           <section className="card grid place-items-center gap-3 px-6 py-16 text-center">

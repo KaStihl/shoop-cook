@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { amount, eur, slotKey } from '@/lib/client';
-import { DAY_LABEL, MEAL_LABEL, SOURCE_LABEL, type Plan, type PlanSlot, type Settings } from '@/lib/types';
+import { DAY_LABEL, MEAL_LABEL, SOURCE_LABEL, type Plan, type PlanSlot, type RecipeListItem, type Settings } from '@/lib/types';
 
 interface Props {
   plan: Plan;
@@ -13,6 +13,10 @@ interface Props {
   onLock: (slot: PlanSlot) => void;
   onSwap: (slot: PlanSlot) => void;
   onFeedback: (slot: PlanSlot, value: number) => void;
+  /** Recipe library for the per-meal picker. */
+  recipes: RecipeListItem[];
+  onPick: (slot: PlanSlot, recipeId: number) => void;
+  onUrl: (slot: PlanSlot, url: string) => void;
 }
 
 const ICONS = {
@@ -21,6 +25,7 @@ const ICONS = {
   swap: 'M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5',
   heart: 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.3l7.8-7.8 1-1.1a5.5 5.5 0 0 0 0-7.8z',
   ban: 'M4.9 4.9l14.2 14.2M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z',
+  pick: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
 };
 
 function IconButton({ icon, label, active, disabled, onClick }: { icon: keyof typeof ICONS; label: string; active?: boolean; disabled?: boolean; onClick: () => void }) {
@@ -43,8 +48,39 @@ function Macro({ label, value, target, unit }: { label: string; value: number; t
   );
 }
 
-function Meal({ slot, locked, busy, onLock, onSwap, onFeedback }: { slot: PlanSlot; locked: boolean; busy: boolean } & Pick<Props, 'onLock' | 'onSwap' | 'onFeedback'>) {
+/** Lets the user put a specific recipe into one meal: from the library or straight from a recipe URL. */
+function Picker({ slot, recipes, busy, onPick, onUrl }: { slot: PlanSlot; busy: boolean } & Pick<Props, 'recipes' | 'onPick' | 'onUrl'>) {
+  const [query, setQuery] = useState('');
+  const [chosen, setChosen] = useState('');
+  const [url, setUrl] = useState('');
+  const kind = slot.meal === 'lunch' || slot.meal === 'dinner' ? 'main' : slot.meal;
+  const options = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return recipes.filter((r) => r.kind === kind && r.feedback >= 0 && r.id !== slot.recipeId && (!q || r.name.toLowerCase().includes(q) || r.ingredients.some((i) => i.name.includes(q))))
+      .sort((a, b) => b.feedback - a.feedback || a.name.localeCompare(b.name, 'sk')).slice(0, 150);
+  }, [recipes, kind, query, slot.recipeId]);
+  return (
+    <div className="mt-2 space-y-2 rounded-xl border border-brand-200 bg-brand-50/40 p-3 text-xs print:hidden">
+      <p className="font-semibold">Vlastný výber pre {MEAL_LABEL[slot.meal].toLowerCase()}</p>
+      <div className="grid gap-2 sm:grid-cols-[10rem_1fr_auto]">
+        <input className="input" placeholder="Hľadať…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Hľadať recept" />
+        <select className="input" value={chosen} onChange={(e) => setChosen(e.target.value)} aria-label="Recept z knižnice">
+          <option value="">{options.length ? `Vyberte recept (${options.length})` : 'Žiadny recept nevyhovuje'}</option>
+          {options.map((r) => <option key={r.id} value={r.id}>{r.name} · {r.kcal} kcal · {eur(r.cost)}</option>)}
+        </select>
+        <button type="button" className="btn btn-primary" disabled={busy || !chosen} onClick={() => onPick(slot, Number(chosen))}>Použiť</button>
+      </div>
+      <form className="grid gap-2 sm:grid-cols-[1fr_auto]" onSubmit={(e) => { e.preventDefault(); onUrl(slot, url.trim()); }}>
+        <input className="input" type="url" required placeholder="alebo adresa receptu: https://…" value={url} onChange={(e) => setUrl(e.target.value)} aria-label="Adresa receptu" />
+        <button type="submit" className="btn btn-ghost" disabled={busy}>Načítať z URL</button>
+      </form>
+    </div>
+  );
+}
+
+function Meal({ slot, locked, busy, onLock, onSwap, onFeedback, recipes, onPick, onUrl }: { slot: PlanSlot; locked: boolean; busy: boolean } & Omit<Props, 'plan' | 'settings' | 'locks' | 'pending'>) {
   const [open, setOpen] = useState(false);
+  const [picking, setPicking] = useState(false);
   return (
     <li className={`px-3 py-2.5 ${busy ? 'animate-pulse' : ''}`}>
       <div className="flex items-start justify-between gap-2">
@@ -59,8 +95,10 @@ function Meal({ slot, locked, busy, onLock, onSwap, onFeedback }: { slot: PlanSl
         <div className="flex shrink-0 gap-1 print:hidden">
           <IconButton icon={locked ? 'lock' : 'unlock'} label={locked ? 'Odomknúť jedlo' : 'Zamknúť jedlo'} active={locked} onClick={() => onLock(slot)} />
           <IconButton icon="swap" label="Vymeniť jedlo" disabled={busy || locked} onClick={() => onSwap(slot)} />
+          <IconButton icon="pick" label="Vybrať vlastný recept" active={picking} onClick={() => setPicking(!picking)} />
         </div>
       </div>
+      {picking && <Picker slot={slot} recipes={recipes} busy={busy} onPick={onPick} onUrl={onUrl} />}
       {open && (
         <div className="mt-2 rounded-xl bg-stone-50 p-3 text-xs">
           <div className="mb-2 flex flex-wrap gap-1">
@@ -86,7 +124,7 @@ function Meal({ slot, locked, busy, onLock, onSwap, onFeedback }: { slot: PlanSl
   );
 }
 
-export function PlanView({ plan, settings, locks, pending, onLock, onSwap, onFeedback }: Props) {
+export function PlanView({ plan, settings, locks, pending, onLock, onSwap, onFeedback, recipes, onPick, onUrl }: Props) {
   const ratio = Math.min(1, plan.cart.total / plan.budget);
   return (
     <div className="space-y-4">
@@ -131,7 +169,7 @@ export function PlanView({ plan, settings, locks, pending, onLock, onSwap, onFee
             <ul className="divide-y divide-stone-100">
               {plan.slots.filter((s) => s.day === index).map((slot) => {
                 const key = slotKey(slot.day, slot.meal);
-                return <Meal key={key} slot={slot} locked={locks.includes(key)} busy={pending === key} onLock={onLock} onSwap={onSwap} onFeedback={onFeedback} />;
+                return <Meal key={key} slot={slot} locked={locks.includes(key)} busy={pending === key} onLock={onLock} onSwap={onSwap} onFeedback={onFeedback} recipes={recipes} onPick={onPick} onUrl={onUrl} />;
               })}
             </ul>
           </section>

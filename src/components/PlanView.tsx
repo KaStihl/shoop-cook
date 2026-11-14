@@ -64,7 +64,7 @@ function Picker({ slot, recipes, busy, onPick, onUrl }: { slot: PlanSlot; busy: 
   return (
     <div className="mt-2 space-y-2 rounded-xl border border-brand-200 bg-brand-50/40 p-3 text-xs print:hidden">
       <p className="font-semibold">Vlastný výber pre {MEAL_LABEL[slot.meal].toLowerCase()}</p>
-      <div className="grid gap-2 sm:grid-cols-[10rem_1fr_auto]">
+      <div className="grid gap-2">
         <input className="input" placeholder="Hľadať…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Hľadať recept" />
         <select className="input" value={chosen} onChange={(e) => setChosen(e.target.value)} aria-label="Recept z knižnice">
           <option value="">{options.length ? `Vyberte recept (${options.length})` : 'Žiadny recept nevyhovuje'}</option>
@@ -72,7 +72,7 @@ function Picker({ slot, recipes, busy, onPick, onUrl }: { slot: PlanSlot; busy: 
         </select>
         <button type="button" className="btn btn-primary" disabled={busy || !chosen} onClick={() => onPick(slot, Number(chosen))}>Použiť</button>
       </div>
-      <form className="grid gap-2 sm:grid-cols-[1fr_auto]" onSubmit={(e) => { e.preventDefault(); onUrl(slot, url.trim()); }}>
+      <form className="grid gap-2" onSubmit={(e) => { e.preventDefault(); onUrl(slot, url.trim()); }}>
         <input className="input" type="url" required placeholder="alebo adresa receptu: https://…" value={url} onChange={(e) => setUrl(e.target.value)} aria-label="Adresa receptu" />
         <button type="submit" className="btn btn-ghost" disabled={busy}>Načítať z URL</button>
       </form>

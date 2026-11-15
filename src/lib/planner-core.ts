@@ -1,16 +1,24 @@
 import { buildCart, type Catalog } from './catalog-core';
 import { violation, type LibraryRecipe, type RecipeFacts } from './recipe-core';
-import { round2 } from './strings';
+import { norm, round2 } from './strings';
 import type { Cart, Macros, MealType, Plan, PlanDay, PlanRequest, PlanSlot, RecipeKind, Settings, Store } from './types';
 import { MEALS, STORE_LABEL, kindOfMeal } from './types';
 
 const DAYS = 7;
 /** Share of the budget a generated filler recipe costs per slot compared with a real recipe. */
 const GENERATED_PENALTY = 0.02;
-const SHARE: Record<MealType, number> = { breakfast: 0.25, snack: 0.1, lunch: 0.35, afternoon: 0.1, dinner: 0.3 };
-/** Breakfast + lunch + dinner already count as a full day; lighter days cover only their part of the targets. */
-const FULL_DAY = 0.9;
 const kindOf = kindOfMeal;
+/**
+ * Recipe sites file baking and desserts next to main courses. Without nutrition targets the cheapest "meal" is flour,
+ * sugar and eggs, so lunch and dinner need a real protein source: meat, fish, tofu, legumes or cheese, or eggs in a dish
+ * that is not a batter (no flour, fruit or sweetener).
+ */
+const DESSERT_NAME = /muffin|kolac|babovk|nakyp|tort|buchty|palacink|lievanc|susienk|dezert|puding|cheesecake|brownie|strudl|zavin|pernik|granol|smoothie/;
+function isMainCourse(name: string, roles: Set<string>, ids: Set<string>): boolean {
+  if (DESSERT_NAME.test(norm(name))) return false;
+  if (roles.has('protein') || roles.has('legume') || roles.has('topping')) return !roles.has('sweet');
+  return roles.has('egg') && !ids.has('muka') && !roles.has('fruit') && !roles.has('sweet');
+}
 
 export interface LibraryEntry {
   recipe: LibraryRecipe;
@@ -37,7 +45,6 @@ interface Candidate {
 interface Slot {
   day: number;
   meal: MealType;
-  targetKcal: number;
 }
 
 interface Group {
@@ -68,19 +75,13 @@ class Planner {
   private readonly slots: Slot[];
   private readonly pool: Record<RecipeKind, Candidate[]> = { breakfast: [], main: [], snack: [] };
   private readonly weight: number;
-  /** Part of the daily targets each day's meals should cover. */
-  private readonly dayShare: number[];
   readonly warnings: string[] = [];
 
   constructor(private readonly settings: Settings, private readonly catalog: Catalog, library: LibraryEntry[]) {
     this.pantry = new Set(settings.pantry);
     this.weight = Math.max(settings.budget, 40);
-    const perDay = Array.from({ length: DAYS }, (_, day) => MEALS.filter((m) => settings.dayMeals[day]?.includes(m)));
-    const sums = perDay.map((meals) => meals.reduce((acc, m) => acc + SHARE[m], 0));
-    // A day with three main meals or more is a full day and is normalised on its own; lighter days cover only their part.
-    const full = sums.map((sum) => Math.max(FULL_DAY, sum));
-    this.dayShare = sums.map((sum, day) => sum / full[day]);
-    this.slots = perDay.flatMap((meals, day) => meals.map((meal) => ({ day, meal, targetKcal: (settings.kcal * SHARE[meal]) / full[day] })));
+    // Every planned meal is one portion of its recipe as written; nutrition is tracked elsewhere, not optimised here.
+    this.slots = Array.from({ length: DAYS }, (_, day) => MEALS.filter((m) => settings.dayMeals[day]?.includes(m)).map((meal) => ({ day, meal }))).flat();
 
     for (const { recipe, facts } of library) {
       const entries = recipe.ingredients.map((ing) => ({ ing, entry: catalog.get(ing.id) }));
@@ -89,7 +90,8 @@ class Planner {
       this.pool[recipe.kind].push({
         recipe, facts, hasDeal,
         cost: entries.reduce((acc, { ing, entry }) => acc + (this.pantry.has(ing.id) ? 0 : (ing.grams / 1000) * (entry?.unitPrice ?? 0)), 0),
-        eligible: recipe.feedback >= 0 && !violation(facts, recipe.prepMinutes, settings),
+        eligible: recipe.feedback >= 0 && !violation(facts, recipe.prepMinutes, settings)
+          && (recipe.kind !== 'main' || isMainCourse(recipe.name, new Set(entries.map(({ entry }) => entry?.role ?? '')), new Set(recipe.ingredients.map((ing) => ing.id)))),
       });
     }
     if (settings.dealMode === 'only') {
@@ -103,10 +105,6 @@ class Planner {
 
   get slotList(): Slot[] {
     return this.slots;
-  }
-
-  private scale(slot: Slot, candidate: Candidate): number {
-    return Math.min(1.8, Math.max(0.6, Math.round(slot.targetKcal / candidate.facts.kcal / 0.05) * 0.05));
   }
 
   private free(kind: RecipeKind, exclude: Set<number> = new Set()): number[] {
@@ -161,27 +159,17 @@ class Planner {
       if (candidate.recipe.feedback > 0) liked += group.slots.length;
       for (const index of group.slots) {
         const slot = this.slots[index];
-        const scale = this.scale(slot, candidate);
-        for (const ing of candidate.recipe.ingredients) needs.set(ing.id, (needs.get(ing.id) ?? 0) + ing.grams * scale * settings.people);
+        for (const ing of candidate.recipe.ingredients) needs.set(ing.id, (needs.get(ing.id) ?? 0) + ing.grams * settings.people);
         const day = days[slot.day];
-        day.kcal += candidate.facts.kcal * scale;
-        day.protein += candidate.facts.protein * scale;
-        day.carbs += candidate.facts.carbs * scale;
-        day.fat += candidate.facts.fat * scale;
+        day.kcal += candidate.facts.kcal;
+        day.protein += candidate.facts.protein;
+        day.carbs += candidate.facts.carbs;
+        day.fat += candidate.facts.fat;
       }
     }
     const cart = buildCart(needs, this.catalog, this.pantry);
     let objective = cart.total - liked * 0.4;
     if (settings.dealMode === 'prefer') objective -= settings.dealWeight * 0.3 * cart.lines.reduce((acc, l) => acc + (l.isDeal ? l.lineTotal : 0), 0);
-    // Soft constraints: anything beyond the ±10 % tolerance costs "virtual euros" proportional to the budget.
-    const excess = (value: number, target: number) => (target > 0 ? Math.max(0, Math.abs(value - target) / target - 0.1) : 0);
-    days.forEach((day, index) => {
-      const share = this.dayShare[index];
-      if (!share) return;
-      const protein = excess(day.protein, settings.protein * share) * (day.protein < settings.protein * share ? 1 : 0.3);
-      objective += this.weight * share
-        * (excess(day.kcal, settings.kcal * share) + protein + 0.3 * excess(day.carbs, settings.carbs * share) + 0.3 * excess(day.fat, settings.fat * share));
-    });
     if (variety) {
       for (const [id, count] of uses) {
         objective += Math.max(0, count - settings.maxRepeats) * this.weight * 0.15;
@@ -206,7 +194,7 @@ class Planner {
       for (const index of this.free(group.kind)) {
         const candidate = this.pool[group.kind][index];
         const used = uses.get(candidate.recipe.id) ?? 0;
-        const servings = group.slots.reduce((acc, s) => acc + this.scale(this.slots[s], candidate), 0) * this.settings.people;
+        const servings = group.slots.length * this.settings.people;
         const score = candidate.cost * servings * (candidate.hasDeal && this.settings.dealMode !== 'off' ? 1 - 0.3 * this.settings.dealWeight : 1)
           + (variety && used + group.slots.length > this.settings.maxRepeats ? this.weight * 0.15 : 0)
           + (variety && this.avoid.has(candidate.recipe.id) ? this.weight * 0.012 * group.slots.length : 0)
@@ -254,19 +242,18 @@ class Planner {
       const candidate = this.pool[group.kind][group.choice];
       for (const index of group.slots) {
         const slot = this.slots[index];
-        const scale = this.scale(slot, candidate);
         slots.push({
-          day: slot.day, meal: slot.meal, recipeId: candidate.recipe.id, name: candidate.recipe.name, scale: round2(scale),
-          kcal: Math.round(candidate.facts.kcal * scale), protein: Math.round(candidate.facts.protein * scale),
-          carbs: Math.round(candidate.facts.carbs * scale), fat: Math.round(candidate.facts.fat * scale),
-          cost: round2(candidate.cost * scale * people), prepMinutes: candidate.recipe.prepMinutes, tags: candidate.recipe.tags,
+          day: slot.day, meal: slot.meal, recipeId: candidate.recipe.id, name: candidate.recipe.name, scale: 1,
+          kcal: Math.round(candidate.facts.kcal), protein: Math.round(candidate.facts.protein),
+          carbs: Math.round(candidate.facts.carbs), fat: Math.round(candidate.facts.fat),
+          cost: round2(candidate.cost * people), prepMinutes: candidate.recipe.prepMinutes, tags: candidate.recipe.tags,
           source: candidate.recipe.source, feedback: candidate.recipe.feedback, hasDeal: candidate.hasDeal,
           ingredients: candidate.recipe.ingredients.map((ing) => {
             const entry = this.catalog.get(ing.id);
-            const part = (ing.grams * scale) / 100;
+            const part = ing.grams / 100;
             const of = (value: number | undefined) => Math.round((value ?? 0) * part * 10) / 10;
             return {
-              id: ing.id, name: entry?.name ?? ing.id, grams: Math.round(ing.grams * scale),
+              id: ing.id, name: entry?.name ?? ing.id, grams: ing.grams,
               kcal: Math.round((entry?.macros?.kcal ?? 0) * part), protein: of(entry?.macros?.protein), carbs: of(entry?.macros?.carbs), fat: of(entry?.macros?.fat),
             };
           }),
@@ -278,7 +265,6 @@ class Planner {
     const days: PlanDay[] = evaluation.days.map((d, day) => ({
       kcal: Math.round(d.kcal), protein: Math.round(d.protein), carbs: Math.round(d.carbs), fat: Math.round(d.fat),
       cost: round2(slots.filter((s) => s.day === day).reduce((acc, s) => acc + s.cost, 0)),
-      share: this.dayShare[day],
     }));
     return { slots, days, cart: evaluation.cart };
   }
@@ -353,5 +339,5 @@ function planFor(request: PlanRequest, stores: Store[], deps: PlanDeps): Plan {
   }
 
   if (evaluation.cart.estimateTotal > 0) warnings.push('Niektoré položky nemajú aktuálnu cenu z obchodu – v košíku sú označené ako „odhad ceny“.');
-  return { generatedAt: new Date().toISOString(), ...planner.toPlan(groups, evaluation), budget: settings.budget, singleStore: null, feasible, minCost, warnings: [...new Set(warnings)] };
+  return { generatedAt: new Date().toISOString(), ...planner.toPlan(groups, evaluation), people: settings.people, budget: settings.budget, singleStore: null, feasible, minCost, warnings: [...new Set(warnings)] };
 }

@@ -41,11 +41,6 @@ export function SettingsPanel({ settings, onChange, ingredients, busy, onGenerat
   const [pantryQuery, setPantryQuery] = useState('');
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => onChange({ ...settings, [key]: value });
   const toggle = <T,>(list: T[], item: T): T[] => (list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
-  // Changing energy or protein re-derives the remaining macros (30 % of energy from fat, rest carbohydrates).
-  const setEnergy = (kcal: number, protein: number) => {
-    const fat = Math.round((kcal * 0.3) / 9);
-    onChange({ ...settings, kcal, protein, fat, carbs: Math.max(20, Math.round((kcal - protein * 4 - fat * 9) / 4)) });
-  };
   // Meals are chosen per day; the chips above the grid switch a meal on or off for the whole week at once.
   const setDayMeals = (dayMeals: MealType[][]) => onChange({ ...settings, dayMeals, meals: MEALS.filter((m) => dayMeals.some((day) => day.includes(m))) });
   const everyDay = (meal: MealType) => settings.dayMeals.every((day) => day.includes(meal));
@@ -62,7 +57,7 @@ export function SettingsPanel({ settings, onChange, ingredients, busy, onGenerat
         <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left lg:pointer-events-none" aria-expanded={open} onClick={() => setOpen(!open)}>
           <span className="text-sm font-semibold">Nastavenia</span>
           <span className="truncate text-xs text-stone-500">
-            {settings.people} os. · {settings.budget} € · {settings.kcal} kcal
+            {settings.people} os. · {settings.budget} € · {settings.dayMeals.reduce((acc, day) => acc + day.length, 0)} jedál
           </span>
           <span className="ml-auto text-stone-400 lg:hidden">{open ? '▲' : '▼'}</span>
         </button>
@@ -74,15 +69,6 @@ export function SettingsPanel({ settings, onChange, ingredients, busy, onGenerat
           <Num label="Počet osôb" value={settings.people} onChange={(v) => set('people', v)} />
           <Num label="Rozpočet na týždeň" suffix="€" value={settings.budget} step={5} onChange={(v) => set('budget', v)} />
         </div>
-
-        <Section title="Ciele na osobu a deň (±10 %)">
-          <div className="grid grid-cols-2 gap-3">
-            <Num label="Energia" suffix="kcal" value={settings.kcal} step={50} onChange={(v) => setEnergy(v, settings.protein)} />
-            <Num label="Bielkoviny" suffix="g" value={settings.protein} step={5} onChange={(v) => setEnergy(settings.kcal, v)} />
-            <Num label="Sacharidy" suffix="g" value={settings.carbs} step={5} onChange={(v) => set('carbs', v)} />
-            <Num label="Tuky" suffix="g" value={settings.fat} step={5} onChange={(v) => set('fat', v)} />
-          </div>
-        </Section>
 
         <Section title="Stravovanie">
           <label className="block">
@@ -127,7 +113,6 @@ export function SettingsPanel({ settings, onChange, ingredients, busy, onGenerat
               ))}
             </tbody>
           </table>
-          <p className="mt-1 text-xs text-stone-500">Deň s menej jedlami pokrýva len príslušnú časť denných cieľov.</p>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <Num label="Max. čas prípravy" suffix="min" value={settings.maxPrep} step={5} onChange={(v) => set('maxPrep', v)} />
             <Num label="Max. opakovaní jedla" value={settings.maxRepeats} onChange={(v) => set('maxRepeats', v)} />

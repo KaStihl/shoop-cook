@@ -19,10 +19,6 @@ export const ALLERGEN_LABEL: Record<string, string> = { milk: 'mlieko', gluten: 
 export interface Settings {
   people: number;
   budget: number;
-  kcal: number;
-  protein: number;
-  carbs: number;
-  fat: number;
   diet: Diet;
   lactoseFree: boolean;
   glutenFree: boolean;
@@ -45,10 +41,6 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   people: 2,
   budget: 90,
-  kcal: 2100,
-  protein: 110,
-  carbs: 240,
-  fat: 70,
   diet: 'all',
   lactoseFree: false,
   glutenFree: false,
@@ -101,8 +93,6 @@ export interface PlanSlot extends Macros {
 
 export interface PlanDay extends Macros {
   cost: number;
-  /** Part of the daily targets this day's planned meals should cover (1 = a full day). */
-  share?: number;
 }
 
 export interface CartLine {
@@ -133,6 +123,8 @@ export interface Cart {
 
 export interface Plan {
   generatedAt: string;
+  /** People the plan was computed for; meal values in `slots` are per person. Absent in older stored plans. */
+  people?: number;
   slots: PlanSlot[];
   days: PlanDay[];
   cart: Cart;

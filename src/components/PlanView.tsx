@@ -41,15 +41,6 @@ function IconButton({ icon, label, active, disabled, onClick }: { icon: keyof ty
   );
 }
 
-function Macro({ label, value, target, unit }: { label: string; value: number; target: number; unit: string }) {
-  const off = target > 0 && Math.abs(value - target) / target > 0.1;
-  return (
-    <span className={off ? 'font-semibold text-amber-700' : ''} title={`Cieľ ${target} ${unit}${off ? ' – mimo tolerancie ±10 %' : ''}`}>
-      {label} {value} {unit}
-    </span>
-  );
-}
-
 /** Lets the user put a specific recipe into one meal: from the library or straight from a recipe URL. */
 function Picker({ slot, recipes, busy, onPick, onUrl }: { slot: PlanSlot; busy: boolean } & Pick<Props, 'recipes' | 'onPick' | 'onUrl'>) {
   const [query, setQuery] = useState('');
@@ -80,7 +71,10 @@ function Picker({ slot, recipes, busy, onPick, onUrl }: { slot: PlanSlot; busy: 
   );
 }
 
-function Meal({ slot, locked, busy, onLock, onSwap, onFeedback, recipes, onPick, onUrl }: { slot: PlanSlot; locked: boolean; busy: boolean } & Omit<Props, 'plan' | 'settings' | 'locks' | 'pending'>) {
+/** "2 osoby", "5 osôb" */
+const persons = (n: number): string => `${n} ${n === 1 ? 'osobu' : n < 5 ? 'osoby' : 'osôb'}`;
+
+function Meal({ slot, people, locked, busy, onLock, onSwap, onFeedback, recipes, onPick, onUrl }: { slot: PlanSlot; people: number; locked: boolean; busy: boolean } & Omit<Props, 'plan' | 'settings' | 'locks' | 'pending'>) {
   const [open, setOpen] = useState(false);
   const [picking, setPicking] = useState(false);
   return (
@@ -90,7 +84,8 @@ function Meal({ slot, locked, busy, onLock, onSwap, onFeedback, recipes, onPick,
           <span className="text-[11px] font-semibold uppercase tracking-wide text-stone-400">{MEAL_LABEL[slot.meal]}</span>
           <span className="block text-sm font-medium leading-snug">{slot.name}</span>
           <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-stone-500">
-            <span>{slot.kcal} kcal</span><span>B {slot.protein} g</span><span>{slot.prepMinutes} min</span><span>{eur(slot.cost)}</span>
+            {/* The meal is cooked for everyone: one portion of the recipe times the number of people. */}
+            <span>{slot.kcal * people} kcal{people > 1 ? ` (${people} × ${slot.kcal})` : ''}</span><span>B {slot.protein * people} g</span><span>{slot.prepMinutes} min</span><span>{eur(slot.cost)}</span>
             {slot.hasDeal && <span className="badge bg-red-50 text-red-700">akcia</span>}
           </span>
         </button>
@@ -107,15 +102,15 @@ function Meal({ slot, locked, busy, onLock, onSwap, onFeedback, recipes, onPick,
             {slot.tags.map((tag) => <span key={tag} className="badge bg-white text-stone-600 ring-1 ring-stone-200">{tag}</span>)}
             <span className="badge bg-white text-stone-600 ring-1 ring-stone-200">{SOURCE_LABEL[slot.source] ?? slot.source}</span>
           </div>
-          <p className="font-semibold">Suroviny na 1 porciu</p>
+          <p className="font-semibold">Suroviny pre {persons(people)}</p>
           <ul className="mb-2 mt-1 grid grid-cols-1 gap-x-4 sm:grid-cols-2">
-            {slot.ingredients.map((ing) => <li key={ing.id} className="flex justify-between"><span>{ing.name}</span><span className="text-stone-500">{amount(ing.grams)}</span></li>)}
+            {slot.ingredients.map((ing) => <li key={ing.id} className="flex justify-between"><span>{ing.name}</span><span className="text-stone-500">{amount(ing.grams * people)}</span></li>)}
           </ul>
           <p className="font-semibold">Postup</p>
           <ol className="mt-1 list-decimal space-y-1 pl-4">{slot.steps.map((step, i) => (
             <li key={i}>{step.startsWith('https://') ? <a className="font-semibold text-emerald-700 underline" href={step} target="_blank" rel="noreferrer">Pôvodný recept a postup na {new URL(step).hostname.replace(/^www\./, '')}</a> : step}</li>
           ))}</ol>
-          <p className="mt-2 text-stone-500">S {slot.carbs} g · T {slot.fat} g · soľ a korenie podľa chuti</p>
+          <p className="mt-2 text-stone-500">Na 1 porciu: {slot.kcal} kcal · B {slot.protein} g · S {slot.carbs} g · T {slot.fat} g · soľ a korenie podľa chuti</p>
           <div className="mt-2 flex gap-2 print:hidden">
             <IconButton icon="heart" label="Páči sa mi" active={slot.feedback > 0} onClick={() => onFeedback(slot, slot.feedback > 0 ? 0 : 1)} />
             <IconButton icon="ban" label="Už nenavrhovať" disabled={busy} onClick={() => onFeedback(slot, -1)} />
@@ -162,20 +157,21 @@ function HybridLogPanel({ day, slots }: { day: number; slots: PlanSlot[] }) {
         ) : <span className="btn btn-primary pointer-events-none opacity-50">Otvoriť HybridLog</span>}
         <button type="button" className="btn btn-ghost" disabled={!picked.length} onClick={() => void copy()}>{copied ? 'Skopírované' : 'Kopírovať text'}</button>
       </div>
-      <p className="text-stone-500">Porcie sú na 1 osobu. Jedlá sa pošlú s gramážou a makrami; text ostane v schránke ako záloha.</p>
+      <p className="text-stone-500">Do HybridLogu ide vždy 1 porcia (pre vás), nie množstvo pre všetky osoby. Text ostane v schránke ako záloha.</p>
     </div>
   );
 }
 
 export function PlanView({ plan, settings, locks, pending, onLock, onSwap, onFeedback, recipes, onPick, onUrl }: Props) {
   const ratio = Math.min(1, plan.cart.total / plan.budget);
+  const people = plan.people ?? settings.people;
   const [logDay, setLogDay] = useState<number | null>(null);
   return (
     <div className="space-y-4">
       <section className="card p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-medium text-stone-500">Nákup na týždeň pre {settings.people} {settings.people === 1 ? 'osobu' : settings.people < 5 ? 'osoby' : 'osôb'}</p>
+            <p className="text-xs font-medium text-stone-500">Nákup na týždeň pre {persons(people)}</p>
             <p className="text-2xl font-bold tracking-tight">
               {eur(plan.cart.total)} <span className="text-sm font-medium text-stone-500">z {eur(plan.budget)}</span>
             </p>
@@ -198,7 +194,6 @@ export function PlanView({ plan, settings, locks, pending, onLock, onSwap, onFee
       <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
         {plan.days.map((day, index) => {
           const slots = plan.slots.filter((s) => s.day === index);
-          const share = day.share ?? 1;
           return (
           <section key={index} className="card overflow-hidden">
             <header className="border-b border-stone-100 bg-stone-50/60 px-3 py-2">
@@ -210,10 +205,7 @@ export function PlanView({ plan, settings, locks, pending, onLock, onSwap, onFee
                 </span>
               </div>
               <p className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-stone-500">
-                <Macro label="" value={day.kcal} target={Math.round(settings.kcal * share)} unit="kcal" />
-                <Macro label="B" value={day.protein} target={Math.round(settings.protein * share)} unit="g" />
-                <Macro label="S" value={day.carbs} target={Math.round(settings.carbs * share)} unit="g" />
-                <Macro label="T" value={day.fat} target={Math.round(settings.fat * share)} unit="g" />
+                <span>{day.kcal * people} kcal{people > 1 ? ` (${people} × ${day.kcal})` : ''}</span><span>B {day.protein * people} g</span><span>S {day.carbs * people} g</span><span>T {day.fat * people} g</span>
               </p>
             </header>
             {logDay === index && <HybridLogPanel day={index} slots={slots} />}
@@ -221,7 +213,7 @@ export function PlanView({ plan, settings, locks, pending, onLock, onSwap, onFee
             <ul className="divide-y divide-stone-100">
               {slots.map((slot) => {
                 const key = slotKey(slot.day, slot.meal);
-                return <Meal key={key} slot={slot} locked={locks.includes(key)} busy={pending === key} onLock={onLock} onSwap={onSwap} onFeedback={onFeedback} recipes={recipes} onPick={onPick} onUrl={onUrl} />;
+                return <Meal key={key} slot={slot} people={people} locked={locks.includes(key)} busy={pending === key} onLock={onLock} onSwap={onSwap} onFeedback={onFeedback} recipes={recipes} onPick={onPick} onUrl={onUrl} />;
               })}
             </ul>
           </section>

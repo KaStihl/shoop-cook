@@ -21,10 +21,6 @@ export function sanitizeSettings(raw: unknown): Settings {
   return {
     people: Math.round(clamp(s.people, 1, 8, d.people)),
     budget: clamp(s.budget, 10, 1000, d.budget),
-    kcal: clamp(s.kcal, 1200, 4500, d.kcal),
-    protein: clamp(s.protein, 30, 300, d.protein),
-    carbs: clamp(s.carbs, 20, 700, d.carbs),
-    fat: clamp(s.fat, 20, 250, d.fat),
     diet: oneOf(s.diet, ['all', 'pescatarian', 'vegetarian', 'vegan'] as const, d.diet),
     lactoseFree: Boolean(s.lactoseFree),
     glutenFree: Boolean(s.glutenFree),

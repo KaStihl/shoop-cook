@@ -9,9 +9,9 @@ async function main(): Promise<void> {
   const settings = DEFAULT_SETTINGS;
   const plan = await generatePlan({ settings, action: 'generate', seed: 1 });
   assert.equal(plan.slots.length, 7 * settings.meals.length, 'každý deň má všetky jedlá');
+  assert.ok(plan.slots.every((s) => s.scale === 1), 'každé jedlo je jedna porcia receptu');
   assert.ok(plan.cart.lines.length > 0 && plan.cart.total > 0, 'košík má položky a cenu');
   assert.ok(Math.abs(plan.cart.total - plan.cart.lines.reduce((a, l) => a + l.lineTotal, 0)) < 0.05, 'súčet košíka sedí');
-  for (const day of plan.days) assert.ok(Math.abs(day.kcal - settings.kcal) / settings.kcal < 0.25, `kcal dňa v rozumnom rozsahu (${day.kcal})`);
 
   const first = plan.slots[0];
   const swapped = await generatePlan({

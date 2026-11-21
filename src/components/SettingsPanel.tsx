@@ -1,12 +1,15 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
-import { ALLERGENS, ALLERGEN_LABEL, DAY_LABEL, MEALS, MEAL_LABEL, ORIGINS, ORIGIN_LABEL, STORES, STORE_LABEL, type DealMode, type Diet, type MealType, type MetaResponse, type Settings } from '@/lib/types';
+import { useMemo, useState, type ReactNode } from 'react';
+import { fitsSettings, recipeOrigin } from '@/lib/recipe-core';
+import { ALLERGENS, ALLERGEN_LABEL, DAY_LABEL, MEALS, MEAL_LABEL, ORIGINS, ORIGIN_LABEL, STORES, STORE_LABEL, type DealMode, type Diet, type MealType, type MetaResponse, type RecipeListItem, type Settings } from '@/lib/types';
 
 interface Props {
   settings: Settings;
   onChange: (next: Settings) => void;
   ingredients: MetaResponse['ingredients'];
+  /** Recipe library, to show how many recipes the current filters leave. */
+  recipes?: RecipeListItem[];
   busy: boolean;
   onGenerate: () => void;
 }
@@ -36,7 +39,15 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-export function SettingsPanel({ settings, onChange, ingredients, busy, onGenerate }: Props) {
+export function SettingsPanel({ settings, onChange, ingredients, recipes = [], busy, onGenerate }: Props) {
+  // How many recipes the planner can choose from with these settings (disliked ones excluded).
+  const fitting = useMemo(() => {
+    const count = { breakfast: 0, main: 0, snack: 0 };
+    for (const r of recipes) {
+      if (r.feedback >= 0 && settings.origins.includes(recipeOrigin(r)) && fitsSettings(r, settings) && (settings.dealMode !== 'only' || r.hasDeal)) count[r.kind]++;
+    }
+    return count;
+  }, [recipes, settings]);
   const [open, setOpen] = useState(false);
   const [pantryQuery, setPantryQuery] = useState('');
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => onChange({ ...settings, [key]: value });
@@ -95,6 +106,12 @@ export function SettingsPanel({ settings, onChange, ingredients, busy, onGenerat
             ))}
           </div>
           <p className="mt-1 text-xs text-stone-500">Týždenný plán sa vyberá len z označených zdrojov. Jedlá, ktoré si vyberiete ručne, ostanú.</p>
+          {recipes.length > 0 && (
+            <p className="mt-1 text-xs text-stone-600" aria-live="polite">
+              Nastaveniam vyhovuje: <b>{fitting.main}</b> obedov a večerí · <b>{fitting.breakfast}</b> raňajok · <b>{fitting.snack}</b> desiat a olovrantov
+              {(fitting.main < 10 || fitting.breakfast === 0 || fitting.snack === 0) && <span className="block text-amber-700">Chýbajúce jedlá doplní plán z ostatných zdrojov; pri malom výbere sa môžu opakovať.</span>}
+            </p>
+          )}
         </Section>
 
         <Section title="Jedlá a varenie">

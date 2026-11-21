@@ -63,7 +63,9 @@ export default function PlanPage() {
     const seen = [...(current.seen[key] ?? []), slot.recipeId];
     setPending(key);
     const plan = await request({ settings: sanitizeSettings(settings), action: 'swap', slots: slotsOf(current), target: { day: slot.day, meal: slot.meal }, exclude: seen });
-    if (plan) setStored({ plan, locks: current.locks, seen: { ...current.seen, [key]: seen } });
+    // When the planner had to start a new round (every fitting recipe was offered), the memory of seen recipes restarts too.
+    const placed = plan?.slots.find((s) => s.day === slot.day && s.meal === slot.meal)?.recipeId;
+    if (plan) setStored({ plan, locks: current.locks, seen: { ...current.seen, [key]: placed !== undefined && seen.includes(placed) ? [] : seen } });
     setPending(null);
   };
 
@@ -122,7 +124,7 @@ export default function PlanPage() {
   const ready = settingsReady && planReady;
   return (
     <div className="grid gap-4 lg:grid-cols-[20rem_1fr] lg:items-start">
-      <SettingsPanel settings={settings} onChange={setSettings} ingredients={ingredients} busy={busy || !ready} onGenerate={generate} />
+      <SettingsPanel settings={settings} onChange={setSettings} ingredients={ingredients} recipes={recipes} busy={busy || !ready} onGenerate={generate} />
       <div className="min-w-0">
         {error && (
           <div role="alert" className="card mb-4 border-red-200 bg-red-50 p-3 text-sm text-red-800">

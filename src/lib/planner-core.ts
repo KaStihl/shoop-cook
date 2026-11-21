@@ -243,8 +243,16 @@ class Planner {
    * (those close to the best in price and variety), so repeated swaps do not just walk down the price list.
    */
   swap(groups: Group[], target: Group, exclude: Set<number>, random: () => number): Evaluation {
-    const options = this.free(target.kind, exclude);
-    if (!options.length) throw new Error('Pre toto jedlo už nie je k dispozícii žiadna ďalšia alternatíva.');
+    let options = this.free(target.kind, exclude);
+    if (!options.length) {
+      // Every fitting recipe has been offered already: start a new round, skipping only the dish being replaced.
+      const current = [...exclude].pop();
+      options = this.free(target.kind, new Set(current === undefined ? [] : [current]));
+    }
+    if (!options.length) {
+      const fitting = this.free(target.kind).length;
+      throw new Error(`Tomuto jedlu vyhovuje pri aktuálnych nastaveniach len ${fitting} ${fitting === 1 ? 'recept' : fitting < 5 && fitting > 0 ? 'recepty' : 'receptov'}. Uvoľnite diétu, alergény, čas prípravy, akcie alebo zdroje receptov.`);
+    }
     const scored = options.map((option) => {
       target.choice = option;
       return { option, evaluation: this.evaluate(groups, true) };

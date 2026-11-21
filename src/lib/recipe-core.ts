@@ -1,6 +1,6 @@
 import type { IngredientDiet } from './canonical';
 import type { Catalog, CatalogEntry } from './catalog-core';
-import { round2 } from './strings';
+import { norm, round2 } from './strings';
 import type { Diet, Macros, RecipeKind, RecipeListItem, RecipeOrigin, Settings } from './types';
 
 /** Source group of a recipe: own, a known recipe site (from the source link in its steps), other web, or generated. */
@@ -150,9 +150,19 @@ export function libraryFrom(rows: RecipeRow[], catalog: Catalog): { recipe: Libr
   const out: { recipe: LibraryRecipe; facts: RecipeFacts }[] = [];
   for (const row of rows) {
     const facts = row.ingredients.every((ing) => usable(catalog.get(ing.id))) ? computeFacts(row.ingredients, catalog) : null;
-    if (facts) out.push({ recipe: { ...row, kind: row.kind as RecipeKind }, facts });
+    if (facts) out.push({ recipe: { ...row, kind: row.kind as RecipeKind }, facts: withTextDiet(facts, row) });
   }
   return out;
+}
+
+// Imported recipes often keep only part of their ingredients (bacon, ham or sausage may stay unrecognised), so the
+// name and the note of unmatched ingredients also decide the diet: a dish that mentions meat or fish is never vegetarian.
+const MEAT_WORDS = /\b(kurec|hovez|veprov|kachn|slanin|sunk|klobas|kurac|kurat|bravc|hovadz|telac|telec|mas[oa]\b|masom|masov|mlet[eyo]|salam|park[yo]|kacic|kacac|kacen|morcac|morcie|jahnac|steak|chorizo|pancett|prosciutt|bacon|ham\b|chicken|beef|pork|gyros|kebab|cevap|spek|hydin)/;
+const FISH_WORDS = /\b(losos|tresk|tuniak|tunak|ryb|krevet|makrel|pstruh|sardin|ancovic|sled|kapor|tilapi|kalamar|calamar|musl|plod[yo] mora|morske plody)/;
+function withTextDiet(facts: RecipeFacts, row: { name: string; steps: string[] }): RecipeFacts {
+  const text = norm([row.name, ...row.steps.filter((s) => !s.startsWith('https://'))].join(' '));
+  const diet = MEAT_WORDS.test(text) ? 'meat' : FISH_WORDS.test(text) ? 'fish' : null;
+  return diet && DIET_RANK[diet] > DIET_RANK[facts.diet] ? { ...facts, diet } : facts;
 }
 
 /** Recipes with macros and today's cost per portion, as the Recepty screen lists them. */

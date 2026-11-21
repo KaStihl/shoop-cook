@@ -111,16 +111,9 @@ function Meal({ slot, people, locked, busy, plan, settings, onLock, onSwap, onFe
           ⇄ Vymeniť sem
         </button>
       )}
-      <div className="flex items-start justify-between gap-2">
-        <button type="button" className="min-w-0 flex-1 text-left" aria-expanded={open} onClick={() => setOpen(!open)}>
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-stone-400">{MEAL_LABEL[slot.meal]}</span>
-          <span className="block text-sm font-medium leading-snug">{slot.name}</span>
-          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-stone-500">
-            {/* The meal is cooked for everyone: one portion of the recipe times the number of people. */}
-            <span>{slot.kcal * people} kcal{people > 1 ? ` (${people} × ${slot.kcal})` : ''}</span><span>B {slot.protein * people} g</span><span>{slot.prepMinutes} min</span><span>{eur(slot.cost)}</span>
-            {slot.hasDeal && <span className="badge bg-red-50 text-red-700">akcia</span>}
-          </span>
-        </button>
+      {/* Header row: which meal it is and the actions; the dish itself gets the full width below. */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-stone-400">{MEAL_LABEL[slot.meal]}</span>
         <div className="flex shrink-0 gap-1 print:hidden">
           <IconButton icon={locked ? 'lock' : 'unlock'} label={locked ? 'Odomknúť jedlo' : 'Zamknúť jedlo'} active={locked} onClick={() => onLock(slot)} />
           <IconButton icon="swap" label="Vymeniť jedlo" disabled={busy || locked} onClick={() => onSwap(slot)} />
@@ -129,6 +122,14 @@ function Meal({ slot, people, locked, busy, plan, settings, onLock, onSwap, onFe
           <IconButton icon="ai" label="AI pomocník k tomuto jedlu" active={asking} onClick={() => setAsking(!asking)} />
         </div>
       </div>
+      <button type="button" className="mt-1 block w-full text-left" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span className="block text-sm font-medium leading-snug">{slot.name}</span>
+        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-stone-500">
+          {/* The meal is cooked for everyone: one portion of the recipe times the number of people. */}
+          <span>{slot.kcal * people} kcal{people > 1 ? ` (${people} × ${slot.kcal})` : ''}</span><span>B {slot.protein * people} g</span><span>{slot.prepMinutes} min</span><span>{eur(slot.cost)}</span>
+          {slot.hasDeal && <span className="badge bg-red-50 text-red-700">akcia</span>}
+        </span>
+      </button>
       {picking && <Picker slot={slot} recipes={recipes} busy={busy} onPick={onPick} onUrl={onUrl} />}
       {asking && <MealAssistant slot={slot} plan={plan} settings={settings} recipes={recipes} onPick={onPick} />}
       {open && (

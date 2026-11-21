@@ -20,6 +20,23 @@ async function main(): Promise<void> {
   });
   assert.notEqual(swapped.slots[0].recipeId, first.recipeId, 'výmena jedla zmení recept');
 
+  // A budget that cannot be met must not undo the repeat limit (it used to fill the week with one cheapest dish).
+  const tight = await generatePlan({ settings: { ...settings, budget: 10, maxRepeats: 1, batch: false }, action: 'generate', seed: 3 });
+  const counts = new Map<number, number>();
+  tight.slots.forEach((s) => counts.set(s.recipeId, (counts.get(s.recipeId) ?? 0) + 1));
+  assert.ok([...counts.values()].every((n) => n === 1), 'pri nízkom rozpočte sa jedlo neopakuje viac, než dovoľuje nastavenie');
+
+  // Repeated swaps pick at random among several good alternatives, not always the next cheapest one.
+  const picks = new Set<number>();
+  for (let i = 0; i < 6; i++) {
+    const next = await generatePlan({
+      settings, action: 'swap', target: { day: first.day, meal: first.meal }, exclude: [first.recipeId], seed: 100 + i,
+      slots: plan.slots.map((s) => ({ day: s.day, meal: s.meal, recipeId: s.recipeId, locked: false })),
+    });
+    picks.add(next.slots[0].recipeId);
+  }
+  assert.ok(picks.size > 1, 'výmena jedla vyberá náhodne z viacerých receptov');
+
   // Only varecha.sk recipes: every lunch and dinner links there (breakfasts may fall back to other sources).
   const varecha = await generatePlan({ settings: { ...settings, origins: ['varecha'] }, action: 'generate', seed: 1 });
   const mains = varecha.slots.filter((s) => s.meal === 'lunch' || s.meal === 'dinner');

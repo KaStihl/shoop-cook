@@ -7,6 +7,15 @@ import { KIND_LABEL, MEALS, ORIGINS, STORE_LABEL, kindOfMeal } from './types';
 const DAYS = 7;
 /** Share of the budget a generated filler recipe costs per slot compared with a real recipe. */
 const GENERATED_PENALTY = 0.02;
+/**
+ * Cost of cooking a recipe more often than "Max. opakovaní jedla", as a share of the budget. High enough that no saving
+ * justifies it, so the limit holds even when the budget is tight; it is only exceeded when too few recipes fit the filters.
+ * A batch-cooked pair (two days from one pot) counts as one cooking.
+ */
+const REPEAT_PENALTY = 3;
+/** A swap chooses at random among this many best alternatives that cost at most a few euros more than the best one. */
+const SWAP_CHOICES = 8;
+const SWAP_SLACK_EUR = 3;
 const kindOf = kindOfMeal;
 /**
  * Recipe sites file baking and desserts next to main courses. Without nutrition targets the cheapest "meal" is flour,
@@ -100,7 +109,7 @@ class Planner {
       for (const kind of Object.keys(this.pool) as RecipeKind[]) {
         const fits = (c: Candidate) => allowed.has(recipeOrigin(c.recipe));
         if (this.pool[kind].some((c) => c.eligible && fits(c))) this.pool[kind].forEach((c) => { c.eligible &&= fits(c); });
-        else if (this.slots.some((s) => kindOf(s.meal) === kind)) this.warnings.push(`Pre ${KIND_LABEL[kind].toLowerCase()} nie je vo vybraných zdrojoch žiadny vhodný recept, použili sa aj ostatné zdroje.`);
+        else if (this.slots.some((s) => kindOf(s.meal) === kind)) this.warnings.push(`${KIND_LABEL[kind]}: vo vybraných zdrojoch nie je žiadny vhodný recept, použili sa aj ostatné zdroje.`);
       }
     }
     if (settings.dealMode === 'only') {
@@ -164,7 +173,7 @@ class Planner {
     let liked = 0;
     for (const group of groups) {
       const candidate = this.pool[group.kind][group.choice];
-      uses.set(candidate.recipe.id, (uses.get(candidate.recipe.id) ?? 0) + group.slots.length);
+      uses.set(candidate.recipe.id, (uses.get(candidate.recipe.id) ?? 0) + 1);
       if (candidate.recipe.feedback > 0) liked += group.slots.length;
       for (const index of group.slots) {
         const slot = this.slots[index];
@@ -179,9 +188,9 @@ class Planner {
     const cart = buildCart(needs, this.catalog, this.pantry);
     let objective = cart.total - liked * 0.4;
     if (settings.dealMode === 'prefer') objective -= settings.dealWeight * 0.3 * cart.lines.reduce((acc, l) => acc + (l.isDeal ? l.lineTotal : 0), 0);
-    if (variety) {
-      for (const [id, count] of uses) {
-        objective += Math.max(0, count - settings.maxRepeats) * this.weight * 0.15;
+    for (const [id, count] of uses) {
+      objective += Math.max(0, count - settings.maxRepeats) * this.weight * REPEAT_PENALTY;
+      if (variety) {
         if (this.avoid.has(id)) objective += count * this.weight * 0.012;
         if (this.generated.has(id)) objective += count * this.weight * GENERATED_PENALTY;
       }
@@ -196,7 +205,7 @@ class Planner {
     for (const group of groups) {
       if (group.choice >= 0) {
         const id = this.pool[group.kind][group.choice].recipe.id;
-        uses.set(id, (uses.get(id) ?? 0) + group.slots.length);
+        uses.set(id, (uses.get(id) ?? 0) + 1);
         continue;
       }
       let bestScore = Infinity;
@@ -205,14 +214,14 @@ class Planner {
         const used = uses.get(candidate.recipe.id) ?? 0;
         const servings = group.slots.length * this.settings.people;
         const score = candidate.cost * servings * (candidate.hasDeal && this.settings.dealMode !== 'off' ? 1 - 0.3 * this.settings.dealWeight : 1)
-          + (variety && used + group.slots.length > this.settings.maxRepeats ? this.weight * 0.15 : 0)
+          + (used + 1 > this.settings.maxRepeats ? this.weight * REPEAT_PENALTY : 0)
           + (variety && this.avoid.has(candidate.recipe.id) ? this.weight * 0.012 * group.slots.length : 0)
           + (variety && candidate.recipe.source === 'rule' ? this.weight * GENERATED_PENALTY * group.slots.length : 0)
           - (candidate.recipe.feedback > 0 ? 0.4 : 0) + random() * 0.05;
         if (score < bestScore) { bestScore = score; group.choice = index; }
       }
       const id = this.pool[group.kind][group.choice].recipe.id;
-      uses.set(id, (uses.get(id) ?? 0) + group.slots.length);
+      uses.set(id, (uses.get(id) ?? 0) + 1);
     }
     let best = this.evaluate(groups, variety);
     for (let i = 0; i < iterations && open.length; i++) {
@@ -229,19 +238,22 @@ class Planner {
     return best;
   }
 
-  /** Replaces one slot with the best alternative while everything else stays as it is. */
-  swap(groups: Group[], target: Group, exclude: Set<number>): Evaluation {
+  /**
+   * Replaces one slot while everything else stays as it is. Picks at random among the few best alternatives
+   * (those close to the best in price and variety), so repeated swaps do not just walk down the price list.
+   */
+  swap(groups: Group[], target: Group, exclude: Set<number>, random: () => number): Evaluation {
     const options = this.free(target.kind, exclude);
     if (!options.length) throw new Error('Pre toto jedlo už nie je k dispozícii žiadna ďalšia alternatíva.');
-    let best: Evaluation | null = null;
-    let bestChoice = options[0];
-    for (const option of options) {
+    const scored = options.map((option) => {
       target.choice = option;
-      const trial = this.evaluate(groups, true);
-      if (!best || trial.objective < best.objective) { best = trial; bestChoice = option; }
-    }
-    target.choice = bestChoice;
-    return best as Evaluation;
+      return { option, evaluation: this.evaluate(groups, true) };
+    }).sort((x, y) => x.evaluation.objective - y.evaluation.objective);
+    const best = scored[0].evaluation.objective;
+    const close = scored.filter((s) => s.evaluation.objective <= best + Math.max(SWAP_SLACK_EUR, this.weight * 0.05)).slice(0, SWAP_CHOICES);
+    const pick = close[Math.floor(random() * close.length)];
+    target.choice = pick.option;
+    return pick.evaluation;
   }
 
   toPlan(groups: Group[], evaluation: Evaluation): Pick<Plan, 'slots' | 'days' | 'cart'> {
@@ -321,7 +333,7 @@ function planFor(request: PlanRequest, stores: Store[], deps: PlanDeps): Plan {
     const open = groups.find((g) => !g.fixed && g.slots.some((i) => planner.slotList[i].day === target.day && planner.slotList[i].meal === target.meal));
     const stragglers = groups.filter((g) => !g.fixed && g !== open);
     if (!open || stragglers.length) throw new Error('Plán sa zmenil, vygenerujte ho prosím znova.');
-    evaluation = planner.swap(groups, open, new Set(request.exclude ?? []));
+    evaluation = planner.swap(groups, open, new Set(request.exclude ?? []), random);
     feasible = evaluation.cart.total <= settings.budget;
   } else {
     const locked = new Map((request.slots ?? []).filter((s) => s.locked).map((s) => [`${s.day}:${s.meal}`, s.recipeId]));
@@ -329,13 +341,13 @@ function planFor(request: PlanRequest, stores: Store[], deps: PlanDeps): Plan {
     groups = planner.buildGroups(locked);
     evaluation = planner.search(groups, true, random, 2500);
     if (evaluation.cart.total > settings.budget) {
-      // Budget not met: relax variety first, then report the minimum achievable cost.
+      // Budget not met: drop the soft preferences (avoided and generated recipes) but keep the repeat limit, then report the minimum achievable cost.
       const snapshot = groups.map((g) => g.choice);
       groups.forEach((g) => { if (!g.fixed) g.choice = -1; });
       const relaxed = planner.search(groups, false, random, 4000);
       if (relaxed.cart.total < evaluation.cart.total) {
         evaluation = relaxed;
-        if (relaxed.cart.total <= settings.budget) warnings.push('Aby sa plán zmestil do rozpočtu, bola znížená pestrosť jedál.');
+        if (relaxed.cart.total <= settings.budget) warnings.push('Aby sa plán zmestil do rozpočtu, použili sa aj jednoduché jedlá zo surovín.');
       } else {
         groups.forEach((g, i) => { g.choice = snapshot[i]; });
       }

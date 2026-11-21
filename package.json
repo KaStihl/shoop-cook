@@ -2,7 +2,9 @@
   "name": "jedlokos",
   "version": "1.0.0",
   "private": true,
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "node node_modules/next/dist/bin/next dev",
     "build": "node node_modules/next/dist/bin/next build",
@@ -19,6 +21,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
+    "@supabase/supabase-js": "^2.119.2",
     "cheerio": "^1.1.2",
     "drizzle-orm": "^0.44.6",
     "next": "^15.5.4",

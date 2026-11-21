@@ -152,5 +152,16 @@ export function toListItems(entries: { recipe: LibraryRecipe; facts: RecipeFacts
     hasDeal: recipe.ingredients.some((ing) => catalog.get(ing.id)?.hasDeal),
     ingredients: recipe.ingredients.map((ing) => ({ id: ing.id, name: catalog.get(ing.id)?.name ?? ing.id, grams: ing.grams })),
     steps: recipe.steps,
+    diet: facts.diet, allergens: [...facts.allergens], lactoseFree: facts.lactoseFree, glutenFree: facts.glutenFree,
   }));
+}
+
+/** Whether a library recipe fits the household's diet, allergens and prep limit (unknown facts count as fitting). */
+export function fitsSettings(item: RecipeListItem, settings: Settings): boolean {
+  if (!item.diet) return item.prepMinutes <= settings.maxPrep;
+  const facts: RecipeFacts = {
+    kcal: item.kcal, protein: item.protein, carbs: item.carbs, fat: item.fat, diet: item.diet,
+    allergens: new Set(item.allergens ?? []), lactoseFree: item.lactoseFree ?? true, glutenFree: item.glutenFree ?? true,
+  };
+  return violation(facts, item.prepMinutes, settings) === null;
 }

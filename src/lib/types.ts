@@ -201,4 +201,9 @@ export interface RecipeListItem extends Macros {
   hasDeal: boolean;
   ingredients: PlanIngredient[];
   steps: string[];
+  /** Dietary facts so the browser can tell which recipes fit the household (absent in older static data). */
+  diet?: 'vegan' | 'vegetarian' | 'fish' | 'meat';
+  allergens?: string[];
+  lactoseFree?: boolean;
+  glutenFree?: boolean;
 }

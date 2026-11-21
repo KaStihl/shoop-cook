@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { amount, eur, slotKey } from '@/lib/client';
 import { dateOfDay, hybridLink, hybridText, toHybridMeal } from '@/lib/hybridlog';
+import { MealAssistant } from './MealAssistant';
 import { DAY_LABEL, MEAL_LABEL, SOURCE_LABEL, kindOfMeal, type Plan, type PlanSlot, type RecipeListItem, type Settings } from '@/lib/types';
 
 interface Props {
@@ -28,6 +29,7 @@ const ICONS = {
   ban: 'M4.9 4.9l14.2 14.2M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z',
   pick: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
   log: 'M12 5v14M5 12h14M4 4h16v16H4z',
+  ai: 'M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z',
 };
 
 function IconButton({ icon, label, active, disabled, onClick }: { icon: keyof typeof ICONS; label: string; active?: boolean; disabled?: boolean; onClick: () => void }) {
@@ -74,9 +76,10 @@ function Picker({ slot, recipes, busy, onPick, onUrl }: { slot: PlanSlot; busy: 
 /** "2 osoby", "5 osôb" */
 const persons = (n: number): string => `${n} ${n === 1 ? 'osobu' : n < 5 ? 'osoby' : 'osôb'}`;
 
-function Meal({ slot, people, locked, busy, onLock, onSwap, onFeedback, recipes, onPick, onUrl }: { slot: PlanSlot; people: number; locked: boolean; busy: boolean } & Omit<Props, 'plan' | 'settings' | 'locks' | 'pending'>) {
+function Meal({ slot, people, locked, busy, plan, settings, onLock, onSwap, onFeedback, recipes, onPick, onUrl }: { slot: PlanSlot; people: number; locked: boolean; busy: boolean } & Omit<Props, 'locks' | 'pending'>) {
   const [open, setOpen] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [asking, setAsking] = useState(false);
   return (
     <li className={`px-3 py-2.5 ${busy ? 'animate-pulse' : ''}`}>
       <div className="flex items-start justify-between gap-2">
@@ -93,9 +96,11 @@ function Meal({ slot, people, locked, busy, onLock, onSwap, onFeedback, recipes,
           <IconButton icon={locked ? 'lock' : 'unlock'} label={locked ? 'Odomknúť jedlo' : 'Zamknúť jedlo'} active={locked} onClick={() => onLock(slot)} />
           <IconButton icon="swap" label="Vymeniť jedlo" disabled={busy || locked} onClick={() => onSwap(slot)} />
           <IconButton icon="pick" label="Vybrať vlastný recept" active={picking} onClick={() => setPicking(!picking)} />
+          <IconButton icon="ai" label="AI pomocník k tomuto jedlu" active={asking} onClick={() => setAsking(!asking)} />
         </div>
       </div>
       {picking && <Picker slot={slot} recipes={recipes} busy={busy} onPick={onPick} onUrl={onUrl} />}
+      {asking && <MealAssistant slot={slot} plan={plan} settings={settings} recipes={recipes} onPick={onPick} />}
       {open && (
         <div className="mt-2 rounded-xl bg-stone-50 p-3 text-xs">
           <div className="mb-2 flex flex-wrap gap-1">
@@ -213,7 +218,7 @@ export function PlanView({ plan, settings, locks, pending, onLock, onSwap, onFee
             <ul className="divide-y divide-stone-100">
               {slots.map((slot) => {
                 const key = slotKey(slot.day, slot.meal);
-                return <Meal key={key} slot={slot} people={people} locked={locks.includes(key)} busy={pending === key} onLock={onLock} onSwap={onSwap} onFeedback={onFeedback} recipes={recipes} onPick={onPick} onUrl={onUrl} />;
+                return <Meal key={key} slot={slot} people={people} locked={locks.includes(key)} busy={pending === key} plan={plan} settings={settings} onLock={onLock} onSwap={onSwap} onFeedback={onFeedback} recipes={recipes} onPick={onPick} onUrl={onUrl} />;
               })}
             </ul>
           </section>

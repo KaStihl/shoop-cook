@@ -55,9 +55,9 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5">{children}</main>
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5 print:max-w-none print:p-0">{children}</main>
 
-      <footer className="mx-auto w-full max-w-7xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-4 text-xs leading-relaxed text-stone-500 sm:pb-6">
+      <footer className="mx-auto w-full max-w-7xl px-4 print:hidden pb-[calc(6rem+env(safe-area-inset-bottom))] pt-4 text-xs leading-relaxed text-stone-500 sm:pb-6">
         Ceny sú orientačné a v predajni sa môžu líšiť. JedloKôš nie je prepojený so spoločnosťami Kaufland, Lidl, Billa ani Tesco a nie je nimi prevádzkovaný.
       </footer>
 

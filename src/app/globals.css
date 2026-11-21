@@ -28,7 +28,15 @@ body {
   .skeleton { @apply animate-pulse rounded-2xl bg-stone-200; }
 }
 
+@page { size: A4 portrait; margin: 12mm; }
+@page week { size: A4 landscape; margin: 9mm 10mm; }
+@page sheet { size: A4 portrait; margin: 12mm; }
+
 @media print {
   body { background: #fff; }
+  /* The week overview gets a landscape page of its own; list and recipes follow on portrait pages. */
+  .print-week { page: week; }
+  .print-page { page: sheet; }
+  .print-page + .print-page { break-before: page; }
   .card { border: none; box-shadow: none; }
 }

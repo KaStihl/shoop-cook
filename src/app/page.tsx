@@ -5,7 +5,12 @@ import { PlanView } from '@/components/PlanView';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { api, slotKey, useStored, type StoredPlan } from '@/lib/client';
 import { sanitizeSettings } from '@/lib/settings';
-import { DEFAULT_SETTINGS, kindOfMeal, type MetaResponse, type Plan, type PlanRequest, type PlanSlot, type RecipeListItem, type Settings } from '@/lib/types';
+import { DEFAULT_SETTINGS, kindOfMeal, type MealType, type MetaResponse, type Plan, type PlanRequest, type PlanSlot, type RecipeListItem, type Settings } from '@/lib/types';
+
+/** "v pondelok", "v stredu" */
+const DAY_IN = ['pondelok', 'utorok', 'stredu', 'štvrtok', 'piatok', 'sobotu', 'nedeľu'];
+/** "na obed", "na večeru" */
+const MEAL_ON: Record<MealType, string> = { breakfast: 'raňajky', snack: 'desiatu', lunch: 'obed', afternoon: 'olovrant', dinner: 'večeru' };
 
 export default function PlanPage() {
   const [settings, setSettings, settingsReady] = useStored<Settings>('jedlokos.settings', DEFAULT_SETTINGS, sanitizeSettings);
@@ -102,6 +107,33 @@ export default function PlanPage() {
     }
   };
 
+  /** Swaps two meals of one kind; every meal stays where it is otherwise, portions and the cart are recomputed. */
+  const move = async (from: PlanSlot, to: PlanSlot) => {
+    if (!stored) return;
+    const fromKey = slotKey(from.day, from.meal);
+    const toKey = slotKey(to.day, to.meal);
+    setPending(toKey);
+    setNotice(null);
+    const recipeAt = (key: string, id: number) => (key === fromKey ? to.recipeId : key === toKey ? from.recipeId : id);
+    const slots = slotsOf(stored).map((s) => ({ ...s, recipeId: recipeAt(slotKey(s.day, s.meal), s.recipeId), locked: true }));
+    const plan = await request({ settings: sanitizeSettings(settings), action: 'generate', slots, seed: Date.now() % 2147483647 });
+    const placed = plan?.slots.find((s) => s.day === to.day && s.meal === to.meal);
+    if (plan && placed?.recipeId === from.recipeId) {
+      // A lock belongs to the dish, so it moves along with it.
+      const had = (key: string) => stored.locks.includes(key);
+      const locks = stored.locks.filter((k) => k !== fromKey && k !== toKey);
+      if (had(fromKey)) locks.push(toKey);
+      if (had(toKey)) locks.push(fromKey);
+      const { [fromKey]: seenFrom = [], [toKey]: seenTo = [], ...seen } = stored.seen;
+      setStored({ plan, locks, seen: { ...seen, [toKey]: seenFrom, [fromKey]: seenTo } });
+      const where = (x: PlanSlot) => `na ${MEAL_ON[x.meal]} v ${DAY_IN[x.day]}`;
+      setNotice(`Vymenené: ${from.name} je teraz ${where(to)}, ${to.name} ${where(from)}. Košík je prepočítaný (${plan.cart.total.toFixed(2)} €).`);
+    } else if (plan) {
+      setError('Jedlá sa nepodarilo vymeniť.');
+    }
+    setPending(null);
+  };
+
   const toggleLock = (slot: PlanSlot) => {
     if (!stored) return;
     const key = slotKey(slot.day, slot.meal);
@@ -123,11 +155,11 @@ export default function PlanPage() {
 
   const ready = settingsReady && planReady;
   return (
-    <div className="grid gap-4 lg:grid-cols-[20rem_1fr] lg:items-start">
+    <div className="grid gap-4 lg:grid-cols-[20rem_1fr] lg:items-start print:block">
       <SettingsPanel settings={settings} onChange={setSettings} ingredients={ingredients} recipes={recipes} busy={busy || !ready} onGenerate={generate} />
       <div className="min-w-0">
         {error && (
-          <div role="alert" className="card mb-4 border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <div role="alert" className="card mb-4 border-red-200 bg-red-50 p-3 text-sm text-red-800 print:hidden">
             {error} <button type="button" className="ml-2 font-semibold underline" onClick={() => setError(null)}>Zavrieť</button>
           </div>
         )}
@@ -139,7 +171,8 @@ export default function PlanPage() {
         ) : stored ? (
           <div className={busy ? 'pointer-events-none opacity-60 transition' : 'transition'}>
             <PlanView plan={stored.plan} settings={settings} locks={stored.locks} pending={pending} onLock={toggleLock} onSwap={(slot) => void swap(slot)} onFeedback={(slot, value) => void feedback(slot, value)}
-              recipes={recipes} onPick={(slot, id) => void pick(slot, id)} onUrl={(slot, url) => void pickFromUrl(slot, url)} />
+              recipes={recipes} onPick={(slot, id) => void pick(slot, id)} onUrl={(slot, url) => void pickFromUrl(slot, url)} onMove={(from, to) => void move(from, to)}
+              pantry={settings.pantry.map((id) => ingredients.find((i) => i.id === id)?.name ?? id)} />
           </div>
         ) : (
           <section className="card grid place-items-center gap-3 px-6 py-16 text-center">

@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { amount, eur, slotKey } from '@/lib/client';
+import { amount, eur, slotKey, useStored } from '@/lib/client';
 import { dateOfDay, hybridLink, hybridText, toHybridMeal } from '@/lib/hybridlog';
 import { MealAssistant } from './MealAssistant';
+import { PRINT_PARTS, PrintPlan, type PrintParts } from './PrintPlan';
 import { DAY_LABEL, MEAL_LABEL, SOURCE_LABEL, kindOfMeal, type Plan, type PlanSlot, type RecipeListItem, type Settings } from '@/lib/types';
 
 interface Props {
@@ -19,6 +20,10 @@ interface Props {
   recipes: RecipeListItem[];
   onPick: (slot: PlanSlot, recipeId: number) => void;
   onUrl: (slot: PlanSlot, url: string) => void;
+  /** Swaps two meals of the same kind (e.g. Monday lunch with Wednesday dinner). */
+  onMove: (from: PlanSlot, to: PlanSlot) => void;
+  /** Names of what is at home, for the printed shopping list. */
+  pantry: string[];
 }
 
 const ICONS = {
@@ -29,6 +34,7 @@ const ICONS = {
   ban: 'M4.9 4.9l14.2 14.2M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z',
   pick: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
   log: 'M12 5v14M5 12h14M4 4h16v16H4z',
+  move: 'M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20',
   ai: 'M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z',
 };
 
@@ -76,12 +82,35 @@ function Picker({ slot, recipes, busy, onPick, onUrl }: { slot: PlanSlot; busy: 
 /** "2 osoby", "5 osôb" */
 const persons = (n: number): string => `${n} ${n === 1 ? 'osobu' : n < 5 ? 'osoby' : 'osôb'}`;
 
-function Meal({ slot, people, locked, busy, plan, settings, onLock, onSwap, onFeedback, recipes, onPick, onUrl }: { slot: PlanSlot; people: number; locked: boolean; busy: boolean } & Omit<Props, 'locks' | 'pending'>) {
+const sameSlot = (a: PlanSlot | null, b: PlanSlot): boolean => Boolean(a && a.day === b.day && a.meal === b.meal);
+/** Meals can trade places only within one kind: lunch and dinner both take main dishes, breakfast and snacks have their own. */
+const canTrade = (a: PlanSlot | null, b: PlanSlot): a is PlanSlot => Boolean(a && !sameSlot(a, b) && kindOfMeal(a.meal) === kindOfMeal(b.meal));
+const slotName = (s: PlanSlot): string => `${DAY_LABEL[s.day].toLowerCase()} ${MEAL_LABEL[s.meal].toLowerCase()}`;
+
+function Meal({ slot, people, locked, busy, plan, settings, onLock, onSwap, onFeedback, recipes, onPick, onUrl, onMove, moving, setMoving }: {
+  slot: PlanSlot; people: number; locked: boolean; busy: boolean; moving: PlanSlot | null; setMoving: (slot: PlanSlot | null) => void;
+} & Omit<Props, 'locks' | 'pending' | 'pantry'>) {
   const [open, setOpen] = useState(false);
   const [picking, setPicking] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [over, setOver] = useState(false);
+  const source = sameSlot(moving, slot);
+  const target = canTrade(moving, slot);
+  const drop = () => {
+    setOver(false);
+    if (canTrade(moving, slot)) onMove(moving, slot);
+    setMoving(null);
+  };
   return (
-    <li className={`px-3 py-2.5 ${busy ? 'animate-pulse' : ''}`}>
+    <li draggable={!picking && !asking && !busy} onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', slotName(slot)); setMoving(slot); }}
+      onDragEnd={() => { setOver(false); setMoving(null); }}
+      onDragOver={(e) => { if (target) { e.preventDefault(); setOver(true); } }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); drop(); }}
+      className={`px-3 py-2.5 transition ${busy ? 'animate-pulse' : ''} ${source ? 'bg-brand-50 ring-2 ring-inset ring-brand-500' : ''} ${over ? 'bg-brand-100' : target ? 'bg-brand-50/50' : ''}`}>
+      {target && (
+        <button type="button" className="mb-2 w-full rounded-lg border border-dashed border-brand-500 bg-white py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50 print:hidden" onClick={drop}>
+          ⇄ Vymeniť sem
+        </button>
+      )}
       <div className="flex items-start justify-between gap-2">
         <button type="button" className="min-w-0 flex-1 text-left" aria-expanded={open} onClick={() => setOpen(!open)}>
           <span className="text-[11px] font-semibold uppercase tracking-wide text-stone-400">{MEAL_LABEL[slot.meal]}</span>
@@ -96,6 +125,7 @@ function Meal({ slot, people, locked, busy, plan, settings, onLock, onSwap, onFe
           <IconButton icon={locked ? 'lock' : 'unlock'} label={locked ? 'Odomknúť jedlo' : 'Zamknúť jedlo'} active={locked} onClick={() => onLock(slot)} />
           <IconButton icon="swap" label="Vymeniť jedlo" disabled={busy || locked} onClick={() => onSwap(slot)} />
           <IconButton icon="pick" label="Vybrať vlastný recept" active={picking} onClick={() => setPicking(!picking)} />
+          <IconButton icon="move" label={source ? 'Zrušiť presun' : 'Presunúť na iný deň'} active={source} disabled={busy} onClick={() => setMoving(source ? null : slot)} />
           <IconButton icon="ai" label="AI pomocník k tomuto jedlu" active={asking} onClick={() => setAsking(!asking)} />
         </div>
       </div>
@@ -167,12 +197,38 @@ function HybridLogPanel({ day, slots }: { day: number; slots: PlanSlot[] }) {
   );
 }
 
-export function PlanView({ plan, settings, locks, pending, onLock, onSwap, onFeedback, recipes, onPick, onUrl }: Props) {
+const PART_LABEL: Record<keyof PrintParts, string> = { week: 'Prehľad týždňa (na šírku)', cart: 'Nákupný zoznam', recipes: 'Recepty' };
+
+/** Lets the user pick which pages to print, then opens the browser's print dialog (also "Save as PDF"). */
+function PrintOptions({ parts, onChange }: { parts: PrintParts; onChange: (parts: PrintParts) => void }) {
+  const any = Object.values(parts).some(Boolean);
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-stone-200 bg-stone-50 p-3 text-sm print:hidden">
+      {(Object.keys(PART_LABEL) as (keyof PrintParts)[]).map((part) => (
+        <label key={part} className="flex items-center gap-1.5">
+          <input type="checkbox" className="h-4 w-4 accent-emerald-600" checked={parts[part]} onChange={() => onChange({ ...parts, [part]: !parts[part] })} />
+          {PART_LABEL[part]}
+        </label>
+      ))}
+      <button type="button" className="btn btn-primary ml-auto" disabled={!any} onClick={() => window.print()}>Tlačiť</button>
+      <p className="w-full text-xs text-stone-500">V prehľade sú všetky jedlá dňa; nenaplánované ostanú prázdne na ručné doplnenie. V okne tlače môžete zvoliť aj „Uložiť ako PDF“.</p>
+    </div>
+  );
+}
+
+const sanitizeParts = (raw: unknown): PrintParts => ({ ...PRINT_PARTS, ...(raw && typeof raw === 'object' ? raw as Partial<PrintParts> : {}) });
+
+export function PlanView({ plan, settings, locks, pending, onLock, onSwap, onFeedback, recipes, onPick, onUrl, onMove, pantry }: Props) {
   const ratio = Math.min(1, plan.cart.total / plan.budget);
   const people = plan.people ?? settings.people;
   const [logDay, setLogDay] = useState<number | null>(null);
+  const [printing, setPrinting] = useState(false);
+  const [moving, setMoving] = useState<PlanSlot | null>(null);
+  const [parts, setParts] = useStored<PrintParts>('jedlokos.printParts', PRINT_PARTS, sanitizeParts);
   return (
-    <div className="space-y-4">
+    <>
+    <PrintPlan plan={plan} people={people} parts={parts} pantry={pantry} />
+    <div className="space-y-4 print:hidden">
       <section className="card p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -183,9 +239,17 @@ export function PlanView({ plan, settings, locks, pending, onLock, onSwap, onFee
           </div>
           <div className="flex items-center gap-3 text-sm">
             {plan.cart.savings > 0 && <span className="badge bg-red-50 px-2 py-1 text-red-700">ušetríte {eur(plan.cart.savings)}</span>}
+            <button type="button" className="btn btn-ghost" aria-expanded={printing} onClick={() => setPrinting(!printing)}>Tlačiť</button>
             <Link href="/kosik" className="btn btn-ghost print:hidden">Zobraziť košík</Link>
           </div>
         </div>
+        {printing && <PrintOptions parts={parts} onChange={setParts} />}
+        {moving ? (
+          <p className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-brand-50 px-3 py-2 text-sm text-brand-900" role="status">
+            Presúvate <b>{moving.name}</b> ({slotName(moving)}). Kliknite na „Vymeniť“ pri jedle, s ktorým sa má vymeniť{kindOfMeal(moving.meal) === 'main' ? ' (obedy a večere)' : ''}.
+            <button type="button" className="font-semibold underline" onClick={() => setMoving(null)}>Zrušiť</button>
+          </p>
+        ) : null}
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-stone-100" role="progressbar" aria-valuenow={Math.round(ratio * 100)} aria-valuemin={0} aria-valuemax={100}>
           <div className={`h-full rounded-full ${plan.feasible ? 'bg-brand-500' : 'bg-red-500'}`} style={{ width: `${ratio * 100}%` }} />
         </div>
@@ -218,7 +282,8 @@ export function PlanView({ plan, settings, locks, pending, onLock, onSwap, onFee
             <ul className="divide-y divide-stone-100">
               {slots.map((slot) => {
                 const key = slotKey(slot.day, slot.meal);
-                return <Meal key={key} slot={slot} people={people} locked={locks.includes(key)} busy={pending === key} plan={plan} settings={settings} onLock={onLock} onSwap={onSwap} onFeedback={onFeedback} recipes={recipes} onPick={onPick} onUrl={onUrl} />;
+                return <Meal key={key} slot={slot} people={people} locked={locks.includes(key)} busy={pending === key} plan={plan} settings={settings} onLock={onLock} onSwap={onSwap} onFeedback={onFeedback} recipes={recipes} onPick={onPick} onUrl={onUrl}
+                  onMove={onMove} moving={moving} setMoving={setMoving} />;
               })}
             </ul>
           </section>
@@ -226,5 +291,6 @@ export function PlanView({ plan, settings, locks, pending, onLock, onSwap, onFee
         })}
       </div>
     </div>
+    </>
   );
 }

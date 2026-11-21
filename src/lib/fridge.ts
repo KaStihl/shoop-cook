@@ -17,7 +17,7 @@ export interface IdeaRecipe {
   steps: string[];
   uses: string[];
 }
-export interface IdeaSlot { day: number; meal: MealType; recipe: string; alternatives: string[] }
+export interface IdeaSlot { day: number; meal: MealType; recipe: string; alternatives: string[]; /** Kept when ideas are made again. */ locked?: boolean }
 export interface WeekProposal { summary: string; recipes: IdeaRecipe[]; slots: IdeaSlot[] }
 
 /** Meals the week has according to the per-day settings. */
@@ -27,8 +27,13 @@ export const weekSlots = (settings: Settings): WeekSlot[] =>
 /** Asks the HybridLog coach (week-planner edge function) to invent recipes for the week from what is at home. */
 export async function inventWeek(args: {
   settings: Settings; ingredients: MetaResponse['ingredients']; recipes: RecipeListItem[]; note: string; wish: string;
+  /** Meals to invent; defaults to the whole week. */
+  only?: WeekSlot[];
+  /** Meals that stay (locked by the user), so the new ideas fit around them. */
+  keep?: { slot: WeekSlot; recipe: IdeaRecipe }[];
 }): Promise<WeekProposal> {
   const { settings } = args;
+  const targets = args.only ?? weekSlots(settings);
   const names = new Map(args.ingredients.map((i) => [i.id, i.name]));
   const body = {
     week_start: dateOfDay(0),
@@ -39,11 +44,15 @@ export async function inventWeek(args: {
       people: settings.people, diet: settings.diet, lactose_free: settings.lactoseFree, gluten_free: settings.glutenFree,
       allergens: settings.allergens, budget_week: settings.budget, max_repeats: settings.maxRepeats, max_prep_minutes: Math.round(settings.maxPrep),
     },
-    slots: weekSlots(settings).map((s) => ({ day: s.day, day_label: DAY_LABEL[s.day], meal: s.meal, meal_label: MEAL_LABEL[s.meal], kind: kindOfMeal(s.meal) })),
+    slots: targets.map((s) => ({ day: s.day, day_label: DAY_LABEL[s.day], meal: s.meal, meal_label: MEAL_LABEL[s.meal], kind: kindOfMeal(s.meal) })),
     // Only ingredients with a price and nutrition data, so every invented recipe can be costed and bought.
     ingredients: args.ingredients.filter((i) => i.usable !== false).map((i) => ({ id: i.id, name: i.name })),
     // Own recipes already in the app; the AI should come up with something else.
     avoid_names: args.recipes.filter((r) => r.source === 'own').map((r) => r.name).slice(0, 60),
+    keep: (args.keep ?? []).slice(0, 35).map(({ slot, recipe }) => ({
+      day_label: DAY_LABEL[slot.day], meal_label: MEAL_LABEL[slot.meal], name: recipe.name,
+      ingredients: recipe.ingredients.map((i) => names.get(i.id) ?? i.id).slice(0, 15),
+    })),
   };
   const { data, error } = await supabase().functions.invoke<WeekProposal & { error?: string }>('week-planner', { body });
   if (error) {
@@ -54,7 +63,24 @@ export async function inventWeek(args: {
     throw new Error(error.message);
   }
   if (!data || !Array.isArray(data.slots) || !Array.isArray(data.recipes)) throw new Error(data?.error ?? 'Prázdna odpoveď.');
-  return { summary: data.summary ?? '', recipes: data.recipes, slots: data.slots };
+  // Keys are unique per answer only; a round prefix keeps them apart when the answer is merged into earlier ideas.
+  const round = Date.now().toString(36);
+  const key = (k: string) => `${round}-${k}`;
+  return {
+    summary: data.summary ?? '',
+    recipes: data.recipes.map((r) => ({ ...r, key: key(r.key) })),
+    slots: data.slots.map((s) => ({ ...s, recipe: key(s.recipe), alternatives: s.alternatives.map(key) })),
+  };
+}
+
+/** Puts freshly invented meals into an existing proposal; other meals stay, unused recipes are dropped. */
+export function mergeProposal(previous: WeekProposal | null, next: WeekProposal, replaced: WeekSlot[]): WeekProposal {
+  if (!previous) return next;
+  const isReplaced = (s: { day: number; meal: MealType }) => replaced.some((r) => r.day === s.day && r.meal === s.meal);
+  const slots = [...previous.slots.filter((s) => !isReplaced(s)), ...next.slots.filter(isReplaced)];
+  const used = new Set(slots.flatMap((s) => [s.recipe, ...s.alternatives]));
+  const recipes = [...previous.recipes, ...next.recipes].filter((r) => used.has(r.key));
+  return { summary: next.summary || previous.summary, recipes, slots };
 }
 
 /**

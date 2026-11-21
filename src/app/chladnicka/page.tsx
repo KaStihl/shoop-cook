@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { SignIn, useSession } from '@/components/HybridAuth';
 import { amount, api, slotKey, useStored, type StoredPlan } from '@/lib/client';
-import { inventWeek, saveIdeas, weekSlots, type IdeaRecipe, type IdeaSlot, type WeekProposal } from '@/lib/fridge';
+import { inventWeek, mergeProposal, saveIdeas, weekSlots, type IdeaRecipe, type IdeaSlot, type WeekProposal, type WeekSlot } from '@/lib/fridge';
 import { sanitizeSettings } from '@/lib/settings';
 import { DAY_LABEL, DEFAULT_SETTINGS, MEAL_LABEL, type MetaResponse, type Plan, type RecipeListItem, type Settings } from '@/lib/types';
 
@@ -49,6 +49,8 @@ export default function FridgePage() {
   const [recipes, setRecipes] = useState<RecipeListItem[]>([]);
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState<'ai' | 'apply' | null>(null);
+  /** The one meal being re-invented, if any ("day:meal"). */
+  const [renewing, setRenewing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -64,16 +66,39 @@ export default function FridgePage() {
   const matches = q.length > 1 ? ingredients.filter((i) => !home.has(i.id) && i.name.toLowerCase().includes(q)).slice(0, 18) : [];
   const toggle = (id: string) => setSettings({ ...settings, pantry: home.has(id) ? settings.pantry.filter((p) => p !== id) : [...settings.pantry, id] });
 
-  const ask = async () => {
+  /**
+   * Invents ideas for the given meal, or for every meal that is not locked; what stays is sent along so the new
+   * ideas fit around it, and everything not replaced is kept as it is.
+   */
+  const ask = async (only?: WeekSlot) => {
+    const planned = weekSlots(settings);
+    const lockedSlots = (proposal?.slots ?? []).filter((s) => s.locked && planned.some((p) => p.day === s.day && p.meal === s.meal));
+    const targets = only ? [only] : planned.filter((p) => !lockedSlots.some((s) => s.day === p.day && s.meal === p.meal));
+    if (!targets.length) {
+      setError('Všetky jedlá sú ponechané. Odomknite tie, ktoré chcete vymyslieť znova.');
+      return;
+    }
+    // Context for the AI: the locked meals, and when renewing one meal also the rest of the week.
+    const staying = (proposal?.slots ?? []).filter((s) => (only ? !(s.day === only.day && s.meal === only.meal) : s.locked));
+    const keep = staying.map((s) => ({ slot: { day: s.day, meal: s.meal }, recipe: ideas.get(s.recipe) }))
+      .filter((k): k is { slot: WeekSlot; recipe: IdeaRecipe } => Boolean(k.recipe));
     setBusy('ai');
+    setRenewing(only ? slotKey(only.day, only.meal) : null);
     setError(null);
     try {
-      setProposal(await inventWeek({ settings, ingredients, recipes, note, wish }));
+      const next = await inventWeek({ settings, ingredients, recipes, note, wish, only: targets, keep });
+      setProposal(mergeProposal(proposal, next, targets));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(null);
+      setRenewing(null);
     }
+  };
+
+  const toggleLock = (choice: IdeaSlot) => {
+    if (!proposal) return;
+    setProposal({ ...proposal, slots: proposal.slots.map((s) => (s.day === choice.day && s.meal === choice.meal ? { ...s, locked: !s.locked } : s)) });
   };
 
   const choose = (choice: IdeaSlot, key: string) => {
@@ -144,7 +169,7 @@ export default function FridgePage() {
           <div className="rounded-xl border border-violet-200 bg-violet-50/40 p-3 text-xs"><SignIn /></div>
         ) : (
           <button type="button" className="btn btn-primary w-full" disabled={busy !== null || !ingredients.length || !planned.length} onClick={() => void ask()}>
-            {busy === 'ai' ? 'AI vymýšľa recepty… (1–2 min)' : proposal ? 'Vymyslieť znova' : 'Vymyslieť týždeň z chladničky'}
+            {busy === 'ai' && !renewing ? 'AI vymýšľa recepty… (1–2 min)' : proposal ? (proposal.slots.some((s) => s.locked) ? 'Vymyslieť znova neponechané jedlá' : 'Vymyslieť znova') : 'Vymyslieť týždeň z chladničky'}
           </button>
         )}
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
@@ -175,8 +200,20 @@ export default function FridgePage() {
                         const choice = choices.get(slotKey(s.day, s.meal));
                         const idea = choice ? ideas.get(choice.recipe) : undefined;
                         return (
-                          <li key={s.meal} className="space-y-1 px-3 py-2.5 text-xs">
-                            <span className="text-[11px] font-semibold uppercase tracking-wide text-stone-400">{MEAL_LABEL[s.meal]}</span>
+                          <li key={s.meal} className={`space-y-1 px-3 py-2.5 text-xs ${renewing === slotKey(s.day, s.meal) ? 'animate-pulse' : ''} ${choice?.locked ? 'bg-brand-50/40' : ''}`}>
+                            <div className="flex flex-wrap items-center justify-between gap-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-stone-400">{MEAL_LABEL[s.meal]}</span>
+                              {choice && idea && (
+                                <span className="flex gap-1">
+                                  <button type="button" aria-pressed={Boolean(choice.locked)} className={`chip !px-2 !py-0.5 ${choice.locked ? 'chip-on' : ''}`} onClick={() => toggleLock(choice)}>
+                                    {choice.locked ? '🔒 Ponechané' : 'Ponechať'}
+                                  </button>
+                                  <button type="button" className="chip !px-2 !py-0.5" disabled={busy !== null || Boolean(choice.locked)} onClick={() => void ask({ day: s.day, meal: s.meal })}>
+                                    {renewing === slotKey(s.day, s.meal) ? 'Vymýšľam…' : 'Nový nápad'}
+                                  </button>
+                                </span>
+                              )}
+                            </div>
                             {!choice || !idea ? <p className="text-stone-500">Bez nápadu – doplní ho bežný plánovač z knižnice.</p> : (
                               <>
                                 <Idea idea={idea} home={home} names={names} />

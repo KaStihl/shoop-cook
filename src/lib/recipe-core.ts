@@ -61,6 +61,18 @@ export interface OwnRecipeInput {
   /** One ingredient per line, e.g. "500 g kuracie prsia". */
   ingredients: string;
   steps: string;
+  /** Already mapped ingredients (canonical id, grams per portion), e.g. from the AI; used instead of `ingredients`. */
+  mapped?: { id: string; grams: number }[];
+}
+
+/** Mapped ingredients of an own recipe: taken as given when supplied, else parsed from the text lines. */
+export function ownIngredients(input: OwnRecipeInput, parse: (lines: string[], portions: number) => { mapped: RecipeIngredient[]; unmatched: string[] }): { mapped: RecipeIngredient[]; unmatched: string[]; lines: number } {
+  if (input.mapped?.length) {
+    const mapped = input.mapped.filter((i) => typeof i.id === 'string' && Number.isFinite(i.grams)).map((i) => ({ id: i.id, grams: Math.round(i.grams) }));
+    return { mapped, unmatched: [], lines: mapped.length };
+  }
+  const lines = input.ingredients.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  return { ...parse(lines, Math.max(1, Math.round(input.portions) || 1)), lines: lines.length };
 }
 
 export const DIET_RANK: Record<IngredientDiet, number> = { vegan: 0, vegetarian: 1, fish: 2, meat: 3 };

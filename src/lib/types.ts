@@ -165,7 +165,8 @@ export interface Freshness {
 }
 
 export interface MetaResponse {
-  ingredients: { id: string; name: string; category: string }[];
+  /** `usable`: has nutrition data and a price, so a recipe with it can be planned and bought. */
+  ingredients: { id: string; name: string; category: string; usable?: boolean }[];
   freshness: Freshness;
   hasLlm: boolean;
 }

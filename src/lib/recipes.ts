@@ -8,7 +8,7 @@ import type { Catalog, CatalogEntry } from './catalog';
 import { parseIngredientLines } from './ingredients';
 import {
   DIET_LIMIT, DIET_RANK, KCAL_RANGE, cap, computeFacts, extrasNote, libraryFrom, prepareRecipe, round5, usable, violation,
-  type Draft, type LibraryRecipe, type OwnRecipeInput, type RecipeFacts, type RecipeIngredient,
+  ownIngredients, type Draft, type LibraryRecipe, type OwnRecipeInput, type RecipeFacts, type RecipeIngredient,
 } from './recipe-core';
 
 export { computeFacts, violation, type LibraryRecipe, type OwnRecipeInput, type RecipeFacts, type RecipeIngredient } from './recipe-core';
@@ -65,9 +65,8 @@ export function importExternal(recipe: ExternalRecipe, catalog: Catalog, source:
 export function saveOwnRecipe(input: OwnRecipeInput, catalog: Catalog): 'saved' | string {
   const name = input.name.trim();
   if (name.length < 3) return 'Zadajte názov receptu.';
-  const lines = input.ingredients.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const { mapped, unmatched } = parseIngredientLines(lines, Math.max(1, Math.round(input.portions) || 1), catalog);
-  if (mapped.length < 2) return `Rozpoznané sú len ${mapped.length} z ${lines.length} surovín. Uveďte aspoň dve bežné suroviny s množstvom, napr. 500 g kuracie prsia.`;
+  const { mapped, unmatched, lines } = ownIngredients(input, (l, portions) => parseIngredientLines(l, portions, catalog));
+  if (mapped.length < 2) return `Rozpoznané sú len ${mapped.length} z ${lines} surovín. Uveďte aspoň dve bežné suroviny s množstvom, napr. 500 g kuracie prsia.`;
   const steps = [...input.steps.split(/\r?\n/).map((l) => l.trim()).filter(Boolean), ...extrasNote(unmatched)];
   const result = finalize({ name, kind: input.kind, ingredients: mapped, steps, prepMinutes: input.prepMinutes || 30, source: 'own' }, catalog);
   if (typeof result === 'string') return result;

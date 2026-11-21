@@ -1,7 +1,7 @@
 import { buildCatalog, type Catalog, type IngredientRow, type ProductRow } from './catalog-core';
 import { parseIngredientLines } from './ingredients';
 import { planWith } from './planner-core';
-import { extrasNote, libraryFrom, prepareRecipe, toListItems, type OwnRecipeInput, type RecipeRow } from './recipe-core';
+import { extrasNote, libraryFrom, ownIngredients, prepareRecipe, toListItems, usable, type OwnRecipeInput, type RecipeRow } from './recipe-core';
 import { sanitizeSettings } from './settings';
 import { norm, today } from './strings';
 import { STORES, type DealItem, type Freshness, type MetaResponse, type PlanRequest, type RecipeKind, type Store } from './types';
@@ -66,9 +66,8 @@ function saveOwn(data: StaticCatalog, input: OwnRecipeInput, kind: RecipeKind): 
   const catalog = catalogFor(data, STORES);
   const name = input.name.trim();
   if (name.length < 3) throw new Error('Zadajte názov receptu.');
-  const lines = input.ingredients.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const { mapped, unmatched } = parseIngredientLines(lines, Math.max(1, Math.round(input.portions) || 1), catalog);
-  if (mapped.length < 2) throw new Error(`Rozpoznané sú len ${mapped.length} z ${lines.length} surovín. Uveďte aspoň dve bežné suroviny s množstvom, napr. 500 g kuracie prsia.`);
+  const { mapped, unmatched, lines } = ownIngredients(input, (l, portions) => parseIngredientLines(l, portions, catalog));
+  if (mapped.length < 2) throw new Error(`Rozpoznané sú len ${mapped.length} z ${lines} surovín. Uveďte aspoň dve bežné suroviny s množstvom, napr. 500 g kuracie prsia.`);
   const steps = [...input.steps.split(/\r?\n/).map((l) => l.trim()).filter(Boolean), ...extrasNote(unmatched)];
   const result = prepareRecipe({ name, kind, ingredients: mapped, steps, prepMinutes: input.prepMinutes || 30, source: 'own' }, catalog);
   if (typeof result === 'string') throw new Error(result);
@@ -104,7 +103,8 @@ export async function staticApi<T>(url: string, init?: RequestInit): Promise<T> 
   const data = await file<StaticCatalog>('catalog.json');
   switch (route) {
     case 'GET /api/meta': {
-      const ingredients = data.ingredients.map(({ id, name, category }) => ({ id, name, category })).sort((a, b) => a.name.localeCompare(b.name, 'sk'));
+      const catalog = catalogFor(data, STORES);
+      const ingredients = data.ingredients.map(({ id, name, category }) => ({ id, name, category, usable: usable(catalog.get(id)) })).sort((a, b) => a.name.localeCompare(b.name, 'sk'));
       return { ingredients, freshness: freshness(data), hasLlm: false } satisfies MetaResponse as T;
     }
     case 'POST /api/plan': {

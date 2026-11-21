@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { ALLERGENS, ALLERGEN_LABEL, DAY_LABEL, MEALS, MEAL_LABEL, STORES, STORE_LABEL, type DealMode, type Diet, type MealType, type MetaResponse, type Settings } from '@/lib/types';
+import { ALLERGENS, ALLERGEN_LABEL, DAY_LABEL, MEALS, MEAL_LABEL, ORIGINS, ORIGIN_LABEL, STORES, STORE_LABEL, type DealMode, type Diet, type MealType, type MetaResponse, type Settings } from '@/lib/types';
 
 interface Props {
   settings: Settings;
@@ -85,6 +85,16 @@ export function SettingsPanel({ settings, onChange, ingredients, busy, onGenerat
           <div className="flex flex-wrap gap-2">
             {ALLERGENS.map((a) => <Chip key={a} on={settings.allergens.includes(a)} onClick={() => set('allergens', toggle(settings.allergens, a))}>{ALLERGEN_LABEL[a]}</Chip>)}
           </div>
+        </Section>
+
+        <Section title="Recepty pre plán">
+          <div className="flex flex-wrap gap-2">
+            {ORIGINS.map((o) => (
+              <Chip key={o} on={settings.origins.includes(o)}
+                onClick={() => { const next = toggle(settings.origins, o); if (next.length) set('origins', next); }}>{ORIGIN_LABEL[o]}</Chip>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-stone-500">Týždenný plán sa vyberá len z označených zdrojov. Jedlá, ktoré si vyberiete ručne, ostanú.</p>
         </Section>
 
         <Section title="Jedlá a varenie">

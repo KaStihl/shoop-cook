@@ -1,7 +1,19 @@
 import type { IngredientDiet } from './canonical';
 import type { Catalog, CatalogEntry } from './catalog-core';
 import { round2 } from './strings';
-import type { Diet, Macros, RecipeKind, RecipeListItem, Settings } from './types';
+import type { Diet, Macros, RecipeKind, RecipeListItem, RecipeOrigin, Settings } from './types';
+
+/** Source group of a recipe: own, a known recipe site (from the source link in its steps), other web, or generated. */
+export function recipeOrigin(recipe: { source: string; steps: string[] }): RecipeOrigin {
+  if (recipe.source === 'own') return 'own';
+  if (recipe.source === 'rule' || recipe.source === 'llm') return 'rule';
+  if (recipe.source === 'yummybox') return 'yummybox';
+  const link = recipe.steps.find((step) => step.startsWith('https://')) ?? '';
+  if (/^https:\/\/(www\.)?billa\.sk\//.test(link)) return 'billa';
+  if (/^https:\/\/([a-z]+\.)*varecha\.(pravda\.)?sk\//.test(link)) return 'varecha';
+  if (/^https:\/\/(www\.)?yummybox\.sk\//.test(link)) return 'yummybox';
+  return 'web';
+}
 
 export interface RecipeIngredient {
   id: string;

@@ -19,6 +19,12 @@ async function main(): Promise<void> {
     slots: plan.slots.map((s) => ({ day: s.day, meal: s.meal, recipeId: s.recipeId, locked: false })),
   });
   assert.notEqual(swapped.slots[0].recipeId, first.recipeId, 'výmena jedla zmení recept');
+
+  // Only varecha.sk recipes: every lunch and dinner links there (breakfasts may fall back to other sources).
+  const varecha = await generatePlan({ settings: { ...settings, origins: ['varecha'] }, action: 'generate', seed: 1 });
+  const mains = varecha.slots.filter((s) => s.meal === 'lunch' || s.meal === 'dinner');
+  assert.ok(mains.every((s) => s.steps.some((step) => step.includes('varecha'))), 'plán berie obedy a večere len z varecha.sk');
+  console.log(`OK – len varecha.sk: ${mains.map((s) => s.name).slice(0, 3).join(', ')}…; upozornenia: ${varecha.warnings.join(' | ') || 'žiadne'}`);
   console.log(`OK – ${plan.slots.length} jedál, košík ${plan.cart.total.toFixed(2)} € (rozpočet ${settings.budget} €), ${plan.cart.lines.length} položiek.`);
 }
 

@@ -1,8 +1,8 @@
 import { buildCart, type Catalog } from './catalog-core';
-import { violation, type LibraryRecipe, type RecipeFacts } from './recipe-core';
+import { recipeOrigin, violation, type LibraryRecipe, type RecipeFacts } from './recipe-core';
 import { norm, round2 } from './strings';
 import type { Cart, Macros, MealType, Plan, PlanDay, PlanRequest, PlanSlot, RecipeKind, Settings, Store } from './types';
-import { MEALS, STORE_LABEL, kindOfMeal } from './types';
+import { KIND_LABEL, MEALS, ORIGINS, STORE_LABEL, kindOfMeal } from './types';
 
 const DAYS = 7;
 /** Share of the budget a generated filler recipe costs per slot compared with a real recipe. */
@@ -93,6 +93,15 @@ class Planner {
         eligible: recipe.feedback >= 0 && !violation(facts, recipe.prepMinutes, settings)
           && (recipe.kind !== 'main' || isMainCourse(recipe.name, new Set(entries.map(({ entry }) => entry?.role ?? '')), new Set(recipe.ingredients.map((ing) => ing.id)))),
       });
+    }
+    // Only the recipe sources the user picked; a meal kind with nothing left keeps all sources rather than failing.
+    if (settings.origins.length < ORIGINS.length) {
+      const allowed = new Set(settings.origins);
+      for (const kind of Object.keys(this.pool) as RecipeKind[]) {
+        const fits = (c: Candidate) => allowed.has(recipeOrigin(c.recipe));
+        if (this.pool[kind].some((c) => c.eligible && fits(c))) this.pool[kind].forEach((c) => { c.eligible &&= fits(c); });
+        else if (this.slots.some((s) => kindOf(s.meal) === kind)) this.warnings.push(`Pre ${KIND_LABEL[kind].toLowerCase()} nie je vo vybraných zdrojoch žiadny vhodný recept, použili sa aj ostatné zdroje.`);
+      }
     }
     if (settings.dealMode === 'only') {
       for (const kind of Object.keys(this.pool) as RecipeKind[]) {

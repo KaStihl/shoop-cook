@@ -1,4 +1,4 @@
-import { ALLERGENS, DEFAULT_SETTINGS, MEALS, STORES, type MealType, type Settings } from './types';
+import { ALLERGENS, DEFAULT_SETTINGS, MEALS, ORIGINS, STORES, type MealType, type Settings } from './types';
 
 const clamp = (value: unknown, min: number, max: number, fallback: number): number => {
   const n = Number(value);
@@ -35,5 +35,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     cartMode: oneOf(s.cartMode, ['split', 'single'] as const, d.cartMode),
     dealMode: oneOf(s.dealMode, ['off', 'prefer', 'only'] as const, d.dealMode),
     dealWeight: clamp(s.dealWeight, 0, 1, d.dealWeight),
+    // At least one source must stay on; an empty choice falls back to all of them.
+    origins: ((o) => (o.length ? o : [...d.origins]))(subset(s.origins, ORIGINS, d.origins)),
   };
 }

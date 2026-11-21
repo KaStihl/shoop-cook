@@ -36,6 +36,8 @@ export interface Settings {
   cartMode: CartMode;
   dealMode: DealMode;
   dealWeight: number;
+  /** Recipe sources the weekly plan is generated from. */
+  origins: RecipeOrigin[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -55,6 +57,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cartMode: 'split',
   dealMode: 'prefer',
   dealWeight: 0.5,
+  origins: ['own', 'billa', 'varecha', 'yummybox', 'web', 'rule'],
 };
 
 export interface Macros {
@@ -185,6 +188,12 @@ export interface DealItem {
 
 export const SOURCE_LABEL: Record<string, string> = {
   own: 'vlastný recept', web: 'recept z webu', yummybox: 'recept z yummybox.sk', llm: 'AI recept', rule: 'zostavený zo surovín',
+};
+/** Where a library recipe comes from, as the user chooses it in settings (web recipes split by site). */
+export type RecipeOrigin = 'own' | 'billa' | 'varecha' | 'yummybox' | 'web' | 'rule';
+export const ORIGINS: RecipeOrigin[] = ['own', 'billa', 'varecha', 'yummybox', 'web', 'rule'];
+export const ORIGIN_LABEL: Record<RecipeOrigin, string> = {
+  own: 'Vlastné', billa: 'billa.sk', varecha: 'varecha.sk', yummybox: 'yummybox.sk', web: 'Iné weby', rule: 'Základné (zo surovín)',
 };
 export const KIND_LABEL: Record<RecipeKind, string> = { breakfast: 'Raňajky', main: 'Obed / večera', snack: 'Desiata' };
 
